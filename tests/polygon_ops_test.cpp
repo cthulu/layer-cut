@@ -8,7 +8,7 @@ namespace {
 layer_cut::Contour rectangle(double min_x, double min_y, double max_x,
                              double max_y) {
   return {{{min_x, min_y}, {max_x, min_y}, {max_x, max_y}, {min_x, max_y}},
-          false, 0.0};
+          false, (max_x - min_x) * (max_y - min_y)};
 }
 
 double total_area(const std::vector<layer_cut::Contour>& contours) {
@@ -41,6 +41,12 @@ int main() {
   const auto intersection = layer_cut::intersection_polygons({first}, {second});
   if (!intersection.ok() || intersection.contours.size() != 1 ||
       std::abs(total_area(intersection.contours) - 50.0) > 1e-6) {
+    ++failures;
+  }
+
+  const auto filtered = layer_cut::remove_small_contours(
+      {rectangle(0, 0, 10, 10), rectangle(0, 0, 0.01, 0.01)}, 0.01);
+  if (filtered.size() != 1 || std::abs(filtered[0].signed_area) < 1.0) {
     ++failures;
   }
   return failures;

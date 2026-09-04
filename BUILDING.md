@@ -35,15 +35,20 @@ Show the available options:
 ./build/cli/layer-cut --help
 ```
 
-Load a binary STL and print its metadata and requested configuration:
+Load a binary STL, slice it, and export numbered SVG layers:
 
 ```bash
-./build/cli/layer-cut model.stl -o output -l 0.2 --format svg --dpi 300
+./build/cli/layer-cut testfiles/fox.stl -o output -l 0.2 --format svg
 ```
 
-The current CLI is a shell: it validates arguments, loads binary STL files,
-and prints metadata. Slicing and SVG/PNG file generation will be added with
-the remaining engine steps.
+The CLI validates and normalizes the binary STL, slices it at midpoint layer
+positions, cleans contours with Clipper2, and writes files named
+`layer_000.svg`, `layer_001.svg`, and so on. SVG dimensions are in millimetres
+and use the normalized model XY bounds unless an explicit canvas is supplied.
+PNG output is not implemented yet.
+
+Contours smaller than `0.01 mm2` are omitted by default as output cleanup.
+Use `--min-area 0` to disable this filtering.
 
 The engine tests now cover mesh normalization, triangle-plane intersections,
 contour reconstruction, layer scheduling, and Clipper2 polygon operations when

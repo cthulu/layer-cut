@@ -4,6 +4,7 @@ add_library(layer_cut_engine STATIC
   src/plane_intersection.cpp
   src/contour_builder.cpp
   src/slicer.cpp
+  src/svg_writer.cpp
   src/stl_loader.cpp
 )
 

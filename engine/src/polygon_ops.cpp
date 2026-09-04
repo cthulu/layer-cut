@@ -89,4 +89,16 @@ PolygonOperationResult intersection_polygons(
   return boolean_operation(Clipper2Lib::ClipType::Intersection, subjects, clips);
 }
 
+std::vector<Contour> remove_small_contours(
+    const std::vector<Contour>& contours, double minimum_area) {
+  if (!std::isfinite(minimum_area) || minimum_area <= 0.0) return contours;
+  std::vector<Contour> filtered;
+  for (const Contour& contour : contours) {
+    if (std::abs(contour.signed_area) >= minimum_area) {
+      filtered.push_back(contour);
+    }
+  }
+  return filtered;
+}
+
 }  // namespace layer_cut
