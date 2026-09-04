@@ -46,9 +46,17 @@ if(LAYER_CUT_FETCH_DEPENDENCIES)
     GIT_TAG 2c980bb59875b0d32144a71867fbdebb2f77cd20
     GIT_SHALLOW FALSE
   )
-  # Clipper2 and CLI11 provide CMake projects. stb is header-only and does
-  # not, so populate it without adding it as a subdirectory.
+  # CLI11 provides a root CMake project. Clipper2's CMake project lives under
+  # CPP, while stb is header-only and is populated without a subdirectory.
   FetchContent_MakeAvailable(clipper2 cli11)
+  # Clipper2 keeps its CMake project under CPP rather than at the repository
+  # root, so FetchContent_MakeAvailable does not add it automatically.
+  if(NOT TARGET Clipper2)
+    set(CLIPPER2_UTILS OFF CACHE BOOL "" FORCE)
+    set(CLIPPER2_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(CLIPPER2_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${clipper2_SOURCE_DIR}/CPP ${clipper2_BINARY_DIR})
+  endif()
   FetchContent_GetProperties(stb)
   if(NOT stb_POPULATED)
     FetchContent_Populate(stb)

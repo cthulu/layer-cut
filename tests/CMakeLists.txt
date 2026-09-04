@@ -44,3 +44,30 @@ target_link_libraries(layer_cut_plane_intersection_test
 add_test(NAME layer_cut_plane_intersection_test
   COMMAND layer_cut_plane_intersection_test
 )
+
+add_executable(layer_cut_contour_builder_test
+  contour_builder_test.cpp
+)
+
+target_link_libraries(layer_cut_contour_builder_test
+  PRIVATE
+    layer_cut_engine
+)
+
+add_test(NAME layer_cut_contour_builder_test
+  COMMAND layer_cut_contour_builder_test
+)
+
+add_executable(layer_cut_slicer_test slicer_test.cpp)
+target_link_libraries(layer_cut_slicer_test PRIVATE layer_cut_engine)
+target_compile_definitions(layer_cut_slicer_test
+  PRIVATE
+    LAYER_CUT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+add_test(NAME layer_cut_slicer_test COMMAND layer_cut_slicer_test)
+
+if(TARGET Clipper2)
+  add_executable(layer_cut_polygon_ops_test polygon_ops_test.cpp)
+  target_link_libraries(layer_cut_polygon_ops_test PRIVATE layer_cut_engine)
+  add_test(NAME layer_cut_polygon_ops_test COMMAND layer_cut_polygon_ops_test)
+endif()

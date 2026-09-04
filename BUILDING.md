@@ -45,6 +45,10 @@ The current CLI is a shell: it validates arguments, loads binary STL files,
 and prints metadata. Slicing and SVG/PNG file generation will be added with
 the remaining engine steps.
 
+The engine tests now cover mesh normalization, triangle-plane intersections,
+contour reconstruction, layer scheduling, and Clipper2 polygon operations when
+dependency fetching is enabled.
+
 ## Run tests
 
 After configuring and building, run all registered tests with:
