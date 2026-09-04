@@ -3,7 +3,8 @@ STEP 15 — Slicing parameters panel
   Action: macos-app/ParametersPanel.swift
   Tech:
     - Sliders/steppers: layer height (0.1–0.3mm, step 0.01)
-    - Text fields: model width, height (auto-filled from STL)
+    - Show model X/Y/Z bounds read-only after normalization. Distinguish
+      those from optional output canvas width/height and never silently scale.
     - Segmented control: output format (SVG / PNG)
     - "Slice" button triggers engine call
     - Show estimated layer count and output file count

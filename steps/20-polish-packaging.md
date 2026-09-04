@@ -7,4 +7,5 @@ STEP 20 — Polish & packaging
     - Code sign: codesign --sign "Developer ID" CricutSlicer.app
     - Create DMG: hdiutil create -format ADIF
                    -srcfolder CricutSlicer.app cricut-slicer.dmg
-    - Optional: notarization via xcrun notarytool
+    - Include hardened runtime, entitlements, architecture/universal-binary
+      decision, reproducible versioning, and notarization prerequisites.

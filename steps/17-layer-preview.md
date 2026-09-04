@@ -3,7 +3,8 @@ STEP 17 — Layer preview panel
   Action: macos-app/LayerPreviewView.swift
   Tech:
     - ScrollView with LazyVGrid of layer thumbnails
-    - SVG rendered via PDFDocument → NSImage (SwiftUI Image(nsImage:))
-    - PNG rendered directly via NSImage
+    - Request engine-generated PNG preview bytes at a UI-appropriate DPI and
+      render them directly via NSImage. This keeps preview geometry aligned
+      with PNG export without adding an SVG renderer dependency.
     - Click a layer → highlight in 3D viewport
     - Layer count badge, zoom controls

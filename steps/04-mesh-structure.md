@@ -7,5 +7,8 @@ STEP 4 — Triangle mesh data structure
     struct Mesh {
         std::vector<Triangle> triangles;
         Vec3 min, max;  // bounding box
-        float compute_volume() const;
+        double compute_volume() const;
     };
+  - Use double for bounds and geometric calculations where practical.
+  - Define volume behavior for open, inverted, degenerate, and
+    self-intersecting meshes; do not use volume alone as a validity check.

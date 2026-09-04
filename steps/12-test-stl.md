@@ -4,4 +4,8 @@ STEP 12 — Test STL model
   Tech:
     - Simple 20mm × 20mm × 20mm cube
     - Generate with Python script or Blender
-    - Expected: 100 layers at 0.2mm, each a 20×20mm square
+    - After min-Z normalization, expected: 100 layers at 0.2mm, each a
+      20×20mm square. Assert contour coordinates and areas with tolerance.
+    - Require a geometry fixture suite covering holes, concavity, tilted faces,
+      disconnected solids, negative coordinates, malformed input, unsafe
+      topology warnings, and non-divisible heights.

@@ -4,8 +4,10 @@ STEP 10 — CLI tool implementation
   Action: cli/main.cpp
   Tech:
     - Argument parsing: CLI11 (header-only, BSD-3)
-    - Flags: --input, --output-dir, --layer-height,
-              --width, --height, --format (svg|png)
+    - Use one consistent input syntax. Define flags for --output-dir,
+      --layer-height, --dpi, --format (svg|png), and optional canvas bounds.
+    - State the millimetre assumption, Z/XY convention, and min-Z
+      normalization in --help.
     - Default layer height: 0.2mm, default format: SVG
     - Flow: load STL → slice → write SVG/PNG → print summary
     - Exit codes: 0 = success, 1 = error, 2 = invalid input

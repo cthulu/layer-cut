@@ -3,7 +3,8 @@ STEP 18 — 3D viewport (model preview)
   Action: macos-app/Viewport3DView.swift
   Tech:
     - Use SceneKit (built into macOS) — no external deps
-    - Load STL via custom parser (reuse engine's STL loader)
+    - Load the validated/normalized mesh through the engine boundary; avoid a
+      second Swift parser with different unit or topology behavior.
     - Draw a horizontal plane at the current layer's Z position
     - Highlight active layer in preview panel when viewport interacted
     - Orbit camera: pan, zoom, rotate via SceneKit SCNNode gestures
