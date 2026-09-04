@@ -1,0 +1,14 @@
+{
+    "name": "layer-cut",
+    "image": "ghcr.io/cirruscontainers/macos/sequoia:latest",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "twxs.cmake"
+            ]
+        }
+    },
+    "forwardPorts": [],
+    "postCreateCommand": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build && ctest --test-dir build --output-on-failure"
+}

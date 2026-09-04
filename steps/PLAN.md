@@ -1,10 +1,10 @@
 # ============================================
-# CRICUT-SLICER — Technical Implementation Plan
+# LAYER-CUT — Technical Implementation Plan
 # ============================================
 #
 # Architecture Overview
 #
-#   cricut-slicer/
+#   layer-cut/
 #   ├── engine/              # C++ core library (static .a)
 #   │   ├── include/         # Public C ABI header
 #   │   ├── src/             # Implementation
@@ -12,7 +12,7 @@
 #   ├── cli/                 # Phase 1: CLI tool (links engine)
 #   │   └── main.cpp
 #   ├── macos-app/           # Phase 2: SwiftUI app (links engine)
-#   │   └── CricutSlicerApp.swift
+#   │   └── LayerCutApp.swift
 #   ├── devcontainer/        # DevContainer config
 #   │   ├── Dockerfile
 #   │   └── devcontainer.json
@@ -53,7 +53,7 @@
 #
 # STEP 1 — Create project scaffold
 #   Goal: Empty repo with folder structure.
-#   Action: Create cricut-slicer/ with subfolders.
+#   Action: Create layer-cut/ with subfolders.
 #   Tech: Standard folder creation. No code yet.
 #
 # STEP 2 — Define development environment
@@ -186,7 +186,7 @@
 #
 # STEP 9 — C ABI bridge header
 #   Goal: Expose engine functionality via a clean C interface for Swift/FFI.
-#   Action: engine/include/cricut_slicer.h
+#   Action: engine/include/layer_cut.h
 #   Tech:
 #     typedef void* slicer_mesh_t;
 #     typedef void* slicer_result_t;
@@ -218,7 +218,7 @@
 #
 # STEP 10 — CLI tool implementation
 #   Goal: Command-line slicer:
-#     cricut-slicer model.stl -o output/ -l 0.2
+#     layer-cut model.stl -o output/ -l 0.2
 #   Action: cli/main.cpp
 #   Tech:
 #     - Argument parsing: CLI11 (header-only, BSD-3)
@@ -235,14 +235,14 @@
 #   Action: Root CMakeLists.txt + per-module CMakeLists.txt
 #   Tech:
 #     cmake_minimum_required(VERSION 3.20)
-#     project(cricut-slicer LANGUAGES CXX)
+#     project(layer-cut LANGUAGES CXX)
 #
 #     add_library(engine STATIC <explicit engine source list>)
 #     target_include_directories(engine PUBLIC engine/include)
 #     target_link_libraries(engine PUBLIC clipper2)
 #
-#     add_executable(cricut-slicer cli/main.cpp)
-#     target_link_libraries(cricut-slicer PRIVATE engine cli11)
+#     add_executable(layer-cut cli/main.cpp)
+#     target_link_libraries(layer-cut PRIVATE engine cli11)
 #
 #     - List source files explicitly; CMake does not expand `*.cpp` globs.
 #     - Pin and document dependencies: Clipper2 (git submodule),
@@ -269,13 +269,13 @@
 #
 # STEP 13 — Swift package / Xcode project setup
 #   Goal: Xcode project that links the C++ engine library.
-#   Action: macos-app/ with CricutSlicerApp.swift, Info.plist
+#   Action: macos-app/ with LayerCutApp.swift, Info.plist
 #   Tech:
 #     - Choose one reproducible integration model: Xcode project or Swift
 #       Package with a native/binary target.
 #     - Link libengine.a plus libc++, set deployment target and architecture,
 #       and verify arm64 (and x86_64 if supported).
-#     - Bridge header: #include "cricut_slicer.h"
+#     - Bridge header: #include "layer_cut.h"
 #     - Swift interop: Use UnsafePointer<CChar> for C string args and import
 #       the C header with fixed-width integer includes and ownership rules.
 #     - AI prompt suggestion:
@@ -361,9 +361,9 @@
 #   Tech:
 #     - Settings: default layer height, output format, DPI for PNG
 #     - Dark mode support (SwiftUI automatic)
-#     - Code sign: codesign --sign "Developer ID" CricutSlicer.app
+#     - Code sign: codesign --sign "Developer ID" LayerCut.app
 #     - Create DMG: hdiutil create -format ADIF
-#                    -srcfolder CricutSlicer.app cricut-slicer.dmg
+#                    -srcfolder LayerCut.app layer-cut.dmg
 #     - Include hardened runtime, entitlements, architecture/universal-binary
 #       decision, reproducible versioning, and notarization prerequisites.
 #

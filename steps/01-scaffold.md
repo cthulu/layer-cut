@@ -1,8 +1,8 @@
-CRICUT-SLICER — Technical Implementation Plan
+LAYER-CUT — Technical Implementation Plan
 
 Architecture Overview
 
-  cricut-slicer/
+  layer-cut/
   ├── engine/              # C++ core library (static .a)
   │   ├── include/         # Public C ABI header
   │   ├── src/             # Implementation
@@ -10,7 +10,7 @@ Architecture Overview
   ├── cli/                 # Phase 1: CLI tool (links engine)
   │   └── main.cpp
   ├── macos-app/           # Phase 2: SwiftUI app (links engine)
-  │   └── CricutSlicerApp.swift
+   │   └── LayerCutApp.swift
   ├── devcontainer/        # DevContainer config
   │   ├── Dockerfile
   │   └── devcontainer.json
@@ -18,5 +18,5 @@ Architecture Overview
 
 STEP 1 — Create project scaffold
   Goal: Empty repo with folder structure.
-  Action: Create cricut-slicer/ with subfolders.
+   Action: Create layer-cut/ with subfolders.
   Tech: Standard folder creation. No code yet.

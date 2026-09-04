@@ -1,6 +1,6 @@
 STEP 9 — C ABI bridge header
   Goal: Expose engine functionality via a clean C interface for Swift/FFI.
-  Action: engine/include/cricut_slicer.h
+  Action: engine/include/layer_cut.h
   Tech:
     #include <stddef.h>
     #include <stdint.h>

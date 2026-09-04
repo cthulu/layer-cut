@@ -4,8 +4,8 @@ STEP 20 — Polish & packaging
   Tech:
     - Settings: default layer height, output format, DPI for PNG
     - Dark mode support (SwiftUI automatic)
-    - Code sign: codesign --sign "Developer ID" CricutSlicer.app
+    - Code sign: codesign --sign "Developer ID" LayerCut.app
     - Create DMG: hdiutil create -format ADIF
-                   -srcfolder CricutSlicer.app cricut-slicer.dmg
+                    -srcfolder LayerCut.app layer-cut.dmg
     - Include hardened runtime, entitlements, architecture/universal-binary
       decision, reproducible versioning, and notarization prerequisites.

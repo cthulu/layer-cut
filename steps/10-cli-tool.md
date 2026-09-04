@@ -1,6 +1,6 @@
 STEP 10 — CLI tool implementation
   Goal: Command-line slicer:
-    cricut-slicer model.stl -o output/ -l 0.2
+    layer-cut model.stl -o output/ -l 0.2
   Action: cli/main.cpp
   Tech:
     - Argument parsing: CLI11 (header-only, BSD-3)

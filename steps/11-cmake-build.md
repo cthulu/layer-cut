@@ -3,14 +3,14 @@ STEP 11 — CMake build system
   Action: Root CMakeLists.txt + per-module CMakeLists.txt
   Tech:
     cmake_minimum_required(VERSION 3.20)
-    project(cricut-slicer LANGUAGES CXX)
+    project(layer-cut LANGUAGES CXX)
 
     add_library(engine STATIC <explicit engine source list>)
     target_include_directories(engine PUBLIC engine/include)
     target_link_libraries(engine PUBLIC clipper2)
 
-    add_executable(cricut-slicer cli/main.cpp)
-    target_link_libraries(cricut-slicer PRIVATE engine cli11)
+    add_executable(layer-cut cli/main.cpp)
+    target_link_libraries(layer-cut PRIVATE engine cli11)
 
     - List source files explicitly; CMake does not expand `*.cpp` globs.
     - Pin and document dependencies: Clipper2 (git submodule),

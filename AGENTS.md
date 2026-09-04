@@ -7,7 +7,7 @@ A cross-platform STL 3D model slicer that converts 3D prints into 2D layers for 
 ## Architecture
 
 ```
-cricut-slicer/
+layer-cut/
 ├── engine/              # C++ core library (static .a)
 │   ├── include/         # Public C ABI header
 │   ├── src/             # Implementation
@@ -22,7 +22,7 @@ cricut-slicer/
 ## Technical Decisions
 
 - **C++17** core engine, compiled as static library (`.a`)
-- **C ABI bridge** (`cricut_slicer.h`) for Swift/FFI interop — no C++ types in the header
+- **C ABI bridge** (`layer_cut.h`) for Swift/FFI interop — no C++ types in the header
 - **Clipper2** (Zlib) for 2D polygon boolean operations, linked as git submodule
 - **stb_image_write** (public domain, header-only) for PNG generation
 - **CLI11** (BSD-3, header-only) for CLI argument parsing
@@ -35,7 +35,11 @@ cricut-slicer/
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
+
+Dependency fetching is opt-in with `-DLAYER_CUT_FETCH_DEPENDENCIES=ON`;
+see `BUILDING.md` for native macOS and cross-platform instructions.
 
 ## Implementation Order
 
@@ -51,6 +55,19 @@ Steps are numbered 01–20 and stored in `steps/`. Execute sequentially — each
 | SceneKit             | 3D viewport (macOS)        | Apple    | System framework |
 
 PrusaSlicer/libslic3r integration is deferred (AGPL-3.0).
+
+## Commit Conventions
+
+Use brief commit messages with a maximum of 2–3 bullet points.
+No long descriptions, no preamble, no postamble.
+
+Example:
+```
+feat: add STL binary parser
+
+- Parse binary STL files with validation and limits
+- Add unit tests for valid, truncated, ASCII, and malformed input
+```
 
 ## Updating This File
 
