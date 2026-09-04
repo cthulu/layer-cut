@@ -2,10 +2,12 @@
 #include "slicer.h"
 #include "stl_loader.h"
 #include "svg_writer.h"
+#include "png_writer.h"
 
 #include <CLI/CLI.hpp>
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -24,6 +26,10 @@ int main(int argc, char* argv[]) {
   double canvas_width = 0.0;
   double canvas_height = 0.0;
   double minimum_area = 0.01;
+  std::string cleanup_mode = "warn";
+  double minimum_feature_width = 0.0;
+  double minimum_hole_width = 0.0;
+  double minimum_bridge_width = 0.0;
   std::string stl_path;
 
   app.add_option("-o,--output-dir", output_dir,
@@ -32,7 +38,7 @@ int main(int argc, char* argv[]) {
                  "Layer height in millimetres (default: 0.2)")
       ->check(CLI::Range(0.01, 1.0));
   app.add_option("-f,--format", format,
-                 "Output format: svg (png is not implemented yet)")
+                 "Output format: svg or png")
       ->check(CLI::IsMember({"svg", "png"}));
   app.add_option("-d,--dpi", dpi, "PNG dots per inch (default: 300)")
       ->check(CLI::Range(72, 1200));
@@ -41,7 +47,19 @@ int main(int argc, char* argv[]) {
   app.add_option("-H,--canvas-height", canvas_height,
                  "Optional output canvas height in millimetres");
   app.add_option("--min-area", minimum_area,
-                 "Remove output contours smaller than this area in square mm (default: 0.01; 0 disables)")
+                 "Minimum island area in square mm (legacy alias; 0 disables)")
+      ->check(CLI::Range(0.0, 1000000.0));
+  app.add_option("--cleanup", cleanup_mode,
+                 "Manufacturing cleanup: preserve, warn, or apply (default: warn)")
+      ->check(CLI::IsMember({"preserve", "warn", "apply"}));
+  app.add_option("--min-feature-width", minimum_feature_width,
+                 "Minimum feature width in millimetres")
+      ->check(CLI::Range(0.0, 1000000.0));
+  app.add_option("--min-hole-width", minimum_hole_width,
+                 "Minimum hole width in millimetres")
+      ->check(CLI::Range(0.0, 1000000.0));
+  app.add_option("--min-bridge-width", minimum_bridge_width,
+                 "Minimum bridge width in millimetres")
       ->check(CLI::Range(0.0, 1000000.0));
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
       ->required();
@@ -57,10 +75,6 @@ int main(int argc, char* argv[]) {
     return 2;
   }
 
-  if (format != "svg") {
-    std::cerr << "Error: PNG output is not implemented yet. Use --format svg.\n";
-    return 2;
-  }
   if ((canvas_width > 0.0) != (canvas_height > 0.0) ||
       (canvas_width != 0.0 && canvas_width <= 0.0) ||
       (canvas_height != 0.0 && canvas_height <= 0.0)) {
@@ -107,8 +121,31 @@ int main(int argc, char* argv[]) {
                 << ": " << cleaned.error << "\n";
       return 1;
     }
-    const auto filtered =
-        layer_cut::remove_small_contours(cleaned.contours, minimum_area);
+    layer_cut::ManufacturingCleanupOptions cleanup;
+    cleanup.mode = cleanup_mode == "preserve"
+                       ? layer_cut::CleanupMode::PRESERVE
+                       : cleanup_mode == "apply" ? layer_cut::CleanupMode::APPLY
+                                                   : layer_cut::CleanupMode::WARN;
+    cleanup.minimum_feature_width = minimum_feature_width;
+    cleanup.minimum_hole_width = minimum_hole_width;
+    cleanup.minimum_bridge_width = minimum_bridge_width;
+    cleanup.minimum_island_area = minimum_area;
+    const auto cleaned_for_cut =
+        layer_cut::apply_manufacturing_cleanup(cleaned.contours, cleanup);
+    if (!cleaned_for_cut.ok) {
+      std::cerr << "Error: Manufacturing cleanup failed for layer " << layer.index
+                << ": " << cleaned_for_cut.error << "\n";
+      return 1;
+    }
+    if (!cleaned_for_cut.warnings.empty()) {
+      std::cerr << "Warning: layer " << layer.index << ": "
+                << cleaned_for_cut.warnings.size()
+                << " feature(s) below manufacturing limits";
+      if (cleanup.mode == layer_cut::CleanupMode::APPLY && cleaned_for_cut.changed)
+        std::cerr << "; geometry modified";
+      std::cerr << "\n";
+    }
+    const auto& filtered = cleaned_for_cut.contours;
     layer_cut::SvgOptions svg_options;
     svg_options.layer_index = layer.index;
     svg_options.layer_z = layer.z;
@@ -118,19 +155,36 @@ int main(int argc, char* argv[]) {
                        canvas_height > 0.0 ? canvas_height : layer.max.y};
     const std::filesystem::path filename =
         std::filesystem::path(output_dir) /
-        ("layer_" + (layer.index < 1000 ? std::string(3 - std::to_string(layer.index).size(), '0') : "") +
-         std::to_string(layer.index) + ".svg");
-    std::string write_error;
-    if (!layer_cut::write_svg_file(filename.string(), filtered,
-                                   svg_options, &write_error)) {
-      std::cerr << "Error: " << write_error << "\n";
-      return 1;
+         ("layer_" + (layer.index < 1000 ? std::string(3 - std::to_string(layer.index).size(), '0') : "") +
+          std::to_string(layer.index) + "." + format);
+    if (format == "svg") {
+      std::string write_error;
+      if (!layer_cut::write_svg_file(filename.string(), filtered, svg_options, &write_error)) {
+        std::cerr << "Error: " << write_error << "\n";
+        return 1;
+      }
+    } else {
+      layer_cut::PngOptions png_options;
+      png_options.min = svg_options.min;
+      png_options.max = svg_options.max;
+      png_options.dpi = dpi;
+      const auto png = layer_cut::make_png(filtered, png_options);
+      if (!png.ok()) {
+        std::cerr << "Error: " << png.error << "\n";
+        return 1;
+      }
+      std::ofstream output(filename, std::ios::binary);
+      if (!output || !output.write(reinterpret_cast<const char*>(png.bytes.data()),
+                                   static_cast<std::streamsize>(png.bytes.size()))) {
+        std::cerr << "Error: Cannot write PNG output: " << filename << "\n";
+        return 1;
+      }
     }
     ++exported;
   }
 
   std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path
-            << "\nGenerated " << exported << " SVG layer(s) in " << output_dir
+            << "\nGenerated " << exported << " " << format << " layer(s) in " << output_dir
             << "\n";
   return 0;
 }

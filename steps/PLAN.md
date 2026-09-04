@@ -155,6 +155,13 @@
 #     - Handle nested contours (holes) natively
 #     - Unit test: Two overlapping circles → single merged polygon
 #
+# STEP 6A — Manufacturing cleanup policy
+#   Goal: Make undersized islands, holes, features, and bridges visible and
+#         optionally apply explicit geometry changes for cutting machines.
+#   Action: Add preserve/warn/apply policy and configurable physical thresholds.
+#   Tech: Warn by default; apply Clipper2 opening/closing offsets and area
+#         filtering only when explicitly selected. Report warnings and changes.
+#
 # STEP 7 — SVG output generator
 #   Goal: Export one physically sized SVG file per numbered layer.
 #   Action: engine/src/svg_writer.cpp + engine/include/svg_writer.h
@@ -399,6 +406,7 @@
 #   05B. Segment deduplication and contour reconstruction
 #   05C. Layer scheduling and slicing orchestration
 #   06. Polygon ops (Clipper2)
+#   06A. Manufacturing cleanup policy
 #   07. SVG writer
 #   08. PNG rasterization and writer
 #   09. C ABI bridge header

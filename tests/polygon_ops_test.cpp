@@ -49,5 +49,21 @@ int main() {
   if (filtered.size() != 1 || std::abs(filtered[0].signed_area) < 1.0) {
     ++failures;
   }
+
+  const auto narrow = rectangle(0, 0, 1, 10);
+  const layer_cut::ManufacturingCleanupOptions warn_options{
+      layer_cut::CleanupMode::WARN, 2.0, 0.0, 0.0, 0.0};
+  const auto warned = layer_cut::apply_manufacturing_cleanup({narrow}, warn_options);
+  if (!warned.ok || warned.changed || warned.contours.size() != 1 || warned.warnings.empty()) ++failures;
+
+  const layer_cut::ManufacturingCleanupOptions preserve_options{
+      layer_cut::CleanupMode::PRESERVE, 2.0, 0.0, 0.0, 0.0};
+  const auto preserved = layer_cut::apply_manufacturing_cleanup({narrow}, preserve_options);
+  if (!preserved.ok || preserved.changed || !preserved.warnings.empty() || preserved.contours.size() != 1) ++failures;
+
+  const layer_cut::ManufacturingCleanupOptions apply_options{
+      layer_cut::CleanupMode::APPLY, 2.0, 0.0, 0.0, 0.0};
+  const auto applied = layer_cut::apply_manufacturing_cleanup({narrow}, apply_options);
+  if (!applied.ok || !applied.changed || !applied.contours.empty()) ++failures;
   return failures;
 }

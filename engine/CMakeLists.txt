@@ -5,7 +5,9 @@ add_library(layer_cut_engine STATIC
   src/contour_builder.cpp
   src/slicer.cpp
   src/svg_writer.cpp
+  src/png_writer.cpp
   src/stl_loader.cpp
+  src/layer_cut.cpp
 )
 
 target_include_directories(layer_cut_engine
@@ -25,6 +27,12 @@ endif()
 if(TARGET Clipper2)
   target_sources(layer_cut_engine PRIVATE src/polygon_ops.cpp)
   target_link_libraries(layer_cut_engine PUBLIC Clipper2)
+  target_compile_definitions(layer_cut_engine PRIVATE LAYER_CUT_HAVE_CLIPPER=1)
+endif()
+
+if(TARGET stb_image_write)
+  target_compile_definitions(layer_cut_engine PRIVATE LAYER_CUT_HAVE_STB=1)
+  target_link_libraries(layer_cut_engine PRIVATE stb_image_write)
 endif()
 
 set_target_properties(layer_cut_engine PROPERTIES

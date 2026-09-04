@@ -69,6 +69,17 @@ feat: add STL binary parser
 - Add unit tests for valid, truncated, ASCII, and malformed input
 ```
 
+## Current State
+
+- Steps 01-12, including substep 06A, are implemented and covered by CTest.
+- Step 08 is implemented: PNG rasterization uses even-odd coverage,
+  stb_image_write encoding, physical DPI metadata, and bounded allocations.
+- Step 09 is implemented: the pure C ABI exposes opaque mesh/config/result
+  handles, thread-local diagnostics, SVG/PNG access, and cleanup APIs.
+- Step 12 includes deterministic fixtures for cubes, negative bounds,
+  disconnected components, concavity, holes, and non-divisible heights.
+- Steps 13-20 (macOS SwiftUI application and packaging) remain.
+
 ## Updating This File
 
 Update this AGENTS.md after completing groups of steps to reflect current state.

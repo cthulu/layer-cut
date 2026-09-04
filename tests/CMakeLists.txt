@@ -70,6 +70,22 @@ add_executable(layer_cut_svg_writer_test svg_writer_test.cpp)
 target_link_libraries(layer_cut_svg_writer_test PRIVATE layer_cut_engine)
 add_test(NAME layer_cut_svg_writer_test COMMAND layer_cut_svg_writer_test)
 
+if(TARGET stb_image_write)
+  add_executable(layer_cut_png_writer_test png_writer_test.cpp)
+  target_link_libraries(layer_cut_png_writer_test PRIVATE layer_cut_engine)
+  add_test(NAME layer_cut_png_writer_test COMMAND layer_cut_png_writer_test)
+endif()
+
+add_executable(layer_cut_geometry_fixtures_test geometry_fixtures_test.cpp)
+target_link_libraries(layer_cut_geometry_fixtures_test PRIVATE layer_cut_engine)
+add_test(NAME layer_cut_geometry_fixtures_test COMMAND layer_cut_geometry_fixtures_test)
+
+add_executable(layer_cut_c_api_test c_api_test.c)
+target_link_libraries(layer_cut_c_api_test PRIVATE layer_cut_engine)
+target_compile_definitions(layer_cut_c_api_test PRIVATE LAYER_CUT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+set_target_properties(layer_cut_c_api_test PROPERTIES LINKER_LANGUAGE CXX)
+add_test(NAME layer_cut_c_api_test COMMAND layer_cut_c_api_test)
+
 if(TARGET Clipper2)
   add_executable(layer_cut_polygon_ops_test polygon_ops_test.cpp)
   target_link_libraries(layer_cut_polygon_ops_test PRIVATE layer_cut_engine)
