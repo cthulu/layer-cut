@@ -1,5 +1,7 @@
 add_library(layer_cut_engine STATIC
   src/engine.cpp
+  src/mesh.cpp
+  src/plane_intersection.cpp
   src/stl_loader.cpp
 )
 

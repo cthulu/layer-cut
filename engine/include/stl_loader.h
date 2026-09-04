@@ -1,20 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include "mesh.h"
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace layer_cut {
-
-struct Vec3 {
-  float x, y, z;
-};
-
-struct Triangle {
-  Vec3 normal;
-  Vec3 a, b, c;
-};
 
 struct LoadError {
   enum class Code {
