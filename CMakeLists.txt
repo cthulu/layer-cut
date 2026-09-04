@@ -62,6 +62,12 @@ endif()
 
 add_subdirectory(engine)
 
+# CLI11 is fetched only when optional dependencies are enabled. The engine and
+# its tests remain buildable without third-party dependencies.
+if(LAYER_CUT_FETCH_DEPENDENCIES)
+  add_subdirectory(cli)
+endif()
+
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
