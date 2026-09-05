@@ -5,6 +5,7 @@
 #include "png_writer.h"
 #include "stacked_preview.h"
 #include "stl_writer.h"
+#include "cricut_page.h"
 
 #include <CLI/CLI.hpp>
 
@@ -72,6 +73,8 @@ int main(int argc, char* argv[]) {
   double minimum_feature_width = 0.0;
   double minimum_hole_width = 0.0;
   double minimum_bridge_width = 0.0;
+  double cricut_gap = 3.0;
+  double cricut_guide_inset = 1.0;
   std::string stl_path;
   std::string stacked_stl_path;
 
@@ -81,8 +84,8 @@ int main(int argc, char* argv[]) {
                  "Layer height in millimetres (default: 0.2)")
       ->check(CLI::Range(0.01, 1.0));
   app.add_option("-f,--format", format,
-                 "Output format: svg or png")
-      ->check(CLI::IsMember({"svg", "png"}));
+                 "Output format: svg, png, cricut-normal, or cricut-large")
+      ->check(CLI::IsMember({"svg", "png", "cricut-normal", "cricut-large"}));
   app.add_option("-d,--dpi", dpi, "PNG dots per inch (default: 300)")
       ->check(CLI::Range(72, 1200));
   app.add_option("-w,--canvas-width", canvas_width,
@@ -104,6 +107,10 @@ int main(int argc, char* argv[]) {
   app.add_option("--min-bridge-width", minimum_bridge_width,
                  "Minimum bridge width in millimetres")
       ->check(CLI::Range(0.0, 1000000.0));
+  app.add_option("--cricut-gap", cricut_gap,
+                 "Cricut tile gap in millimetres (default: 3)");
+  app.add_option("--cricut-guide-inset", cricut_guide_inset,
+                 "Cricut guide inset in millimetres (default: 1)");
   app.add_option("--stacked-stl", stacked_stl_path,
                  "Optional watertight stacked-layer preview STL path");
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
@@ -162,6 +169,78 @@ int main(int argc, char* argv[]) {
   std::vector<layer_cut::SliceLayer> prepared_layers;
   prepared_layers.reserve(sliced.layers.size());
   print_progress(0, sliced.layers.size());
+
+  if (format == "cricut-normal" || format == "cricut-large") {
+    std::vector<layer_cut::SliceLayer> prepared_layers;
+    prepared_layers.reserve(sliced.layers.size());
+    for (const auto& layer : sliced.layers) {
+      const auto cleaned = layer_cut::union_polygons(layer.contours);
+      if (!cleaned.ok()) {
+        std::cerr << "Error: Polygon cleanup failed for layer " << layer.index
+                  << ": " << cleaned.error << "\n";
+        return 1;
+      }
+      layer_cut::ManufacturingCleanupOptions cleanup;
+      cleanup.mode = cleanup_mode == "preserve"
+                         ? layer_cut::CleanupMode::PRESERVE
+                         : cleanup_mode == "apply" ? layer_cut::CleanupMode::APPLY
+                                                     : layer_cut::CleanupMode::WARN;
+      cleanup.minimum_feature_width = minimum_feature_width;
+      cleanup.minimum_hole_width = minimum_hole_width;
+      cleanup.minimum_bridge_width = minimum_bridge_width;
+      cleanup.minimum_island_area = minimum_area;
+      const auto cleaned_for_cut =
+          layer_cut::apply_manufacturing_cleanup(cleaned.contours, cleanup);
+      if (!cleaned_for_cut.ok) {
+        std::cerr << "Error: Manufacturing cleanup failed for layer " << layer.index
+                  << ": " << cleaned_for_cut.error << "\n";
+        return 1;
+      }
+      auto prepared_layer = layer;
+      prepared_layer.contours = cleaned_for_cut.contours;
+      prepared_layers.push_back(std::move(prepared_layer));
+    }
+    layer_cut::CricutPageOptions page_options;
+    page_options.size = format == "cricut-large"
+                            ? layer_cut::CricutPageSize::LARGE
+                            : layer_cut::CricutPageSize::NORMAL;
+    page_options.gap_mm = cricut_gap;
+    const auto pages = layer_cut::build_cricut_pages(prepared_layers, page_options);
+    if (!pages.ok()) {
+      std::cerr << "Error: Cricut page generation failed: " << pages.error << "\n";
+      return 1;
+    }
+    for (const auto& page : pages.pages) {
+      const std::string prefix = "page_" +
+          (page.page_index < 1000 ? std::string(3 - std::to_string(page.page_index).size(), '0') : "") +
+          std::to_string(page.page_index) + "_layers_" +
+          (page.tiles.front().layer_index < 1000 ? std::string(3 - std::to_string(page.tiles.front().layer_index).size(), '0') : "") +
+          std::to_string(page.tiles.front().layer_index) + "-" +
+          (page.tiles.back().layer_index < 1000 ? std::string(3 - std::to_string(page.tiles.back().layer_index).size(), '0') : "") +
+          std::to_string(page.tiles.back().layer_index);
+      const auto cut_path = std::filesystem::path(output_dir) / (prefix + ".cut.svg");
+      const auto guide_path = std::filesystem::path(output_dir) / (prefix + ".guide.svg");
+      std::vector<std::string> guide_warnings;
+      const std::string guide_svg = layer_cut::make_cricut_guide_svg(
+          page, cricut_guide_inset, &guide_warnings);
+      std::ofstream cut(cut_path);
+      std::ofstream guide(guide_path);
+      if (!cut || !guide || !(cut << layer_cut::make_cricut_cut_svg(page)) ||
+          !(guide << guide_svg)) {
+        std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
+        return 1;
+      }
+      for (const std::string& warning : guide_warnings) {
+        std::cerr << "Warning: page " << page.page_index << ": " << warning << "\n";
+      }
+      exported += page.tiles.size();
+    }
+    std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path
+              << "\nGenerated " << pages.pages.size() << " Cricut page(s) in "
+              << output_dir << "\n";
+    return 0;
+  }
+
   for (const auto& layer : sliced.layers) {
     const auto cleaned = layer_cut::union_polygons(layer.contours);
     if (!cleaned.ok()) {

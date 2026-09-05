@@ -8,6 +8,7 @@ add_library(layer_cut_engine STATIC
   src/png_writer.cpp
   src/stl_writer.cpp
   src/stacked_preview.cpp
+  src/cricut_page.cpp
   src/stl_loader.cpp
   src/layer_cut.cpp
 )

@@ -24,11 +24,13 @@ independent.
 - Reject an oversized layer instead of scaling or splitting it.
 - Enforce a conservative 4,500-path limit per SVG page.
 - Generate separate `.cut.svg` and `.guide.svg` files for every page.
+- Cricut PNG pages are explicitly deferred and are not implemented by this plan.
 - Use one guide file per page, with one independently selectable guide group per interface.
 - Use true inward offsets in millimetres for production guides.
 - Omit guides that cannot be contained by the previous layer and emit warnings.
 - Keep `tight-packing` as a future strategy.
 - Add an optional accurate, watertight stacked STL preview.
+- Do not attempt automated Design Space validation; validation is manual only.
 
 ## Rejected Alternatives
 

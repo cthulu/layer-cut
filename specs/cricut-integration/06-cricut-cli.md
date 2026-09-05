@@ -16,6 +16,9 @@ PNG behavior.
 
 Keep existing `svg` and `png` values unchanged.
 
+Cricut page output is SVG-only. `cricut-normal` and `cricut-large` must not
+silently produce PNG pages; Cricut PNG pages remain unimplemented.
+
 ## Options
 
 Add options equivalent to:
@@ -37,6 +40,8 @@ return a clear unsupported-strategy error until its spec is implemented.
 - Report omitted guides and their reasons.
 - Generate the shared alignment marker in both paired files with identical
   geometry and page coordinates for stacking the imports in Design Space.
+- Mark the guide marker as `draw` and the cut marker as `ignore`; standard SVG
+  metadata does not automatically assign Cricut operations.
 - Use current exit-code conventions: 0 success, 1 runtime error, 2 invalid input.
 - Reuse existing STL loading, normalization, slicing, union, and cleanup policies.
 

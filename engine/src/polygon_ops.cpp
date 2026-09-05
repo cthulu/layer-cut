@@ -139,8 +139,8 @@ bool contours_equal(const std::vector<Contour>& first,
   return true;
 }
 
-PolygonOperationResult offset_polygons(const std::vector<Contour>& contours,
-                                       double delta) {
+PolygonOperationResult offset_polygons_impl(const std::vector<Contour>& contours,
+                                            double delta) {
   Clipper2Lib::Paths64 paths;
   if (!to_paths(contours, paths)) return {{}, "Polygon coordinate is non-finite or exceeds the integer range"};
   try {
@@ -187,6 +187,11 @@ PolygonOperationResult boolean_operation(
 }
 
 }  // namespace
+
+PolygonOperationResult offset_polygons(const std::vector<Contour>& contours,
+                                       double delta_mm) {
+  return offset_polygons_impl(contours, delta_mm);
+}
 
 PolygonOperationResult union_polygons(const std::vector<Contour>& subjects) {
   return boolean_operation(Clipper2Lib::ClipType::Union, subjects, {});
@@ -237,9 +242,9 @@ ManufacturingCleanupResult apply_manufacturing_cleanup(
     if (probe.minimum_feature_width > 0.0 || probe.minimum_bridge_width > 0.0) {
       const double width = std::max(probe.minimum_feature_width,
                                     probe.minimum_bridge_width);
-      const auto eroded = offset_polygons(contours, -width / 2.0);
+      const auto eroded = offset_polygons_impl(contours, -width / 2.0);
       if (!eroded.ok()) { result.ok = false; result.error = eroded.error; return result; }
-      const auto opened = offset_polygons(eroded.contours, width / 2.0);
+      const auto opened = offset_polygons_impl(eroded.contours, width / 2.0);
       if (!opened.ok()) { result.ok = false; result.error = opened.error; return result; }
       if (filled_area_decreased(opened.contours, contours)) {
         for (std::size_t i = 0; i < contours.size(); ++i) {
@@ -249,9 +254,9 @@ ManufacturingCleanupResult apply_manufacturing_cleanup(
       }
     }
     if (probe.minimum_hole_width > 0.0) {
-      const auto expanded = offset_polygons(contours, probe.minimum_hole_width / 2.0);
+      const auto expanded = offset_polygons_impl(contours, probe.minimum_hole_width / 2.0);
       if (!expanded.ok()) { result.ok = false; result.error = expanded.error; return result; }
-      const auto closed = offset_polygons(expanded.contours,
+      const auto closed = offset_polygons_impl(expanded.contours,
                                           -probe.minimum_hole_width / 2.0);
       if (!closed.ok()) { result.ok = false; result.error = closed.error; return result; }
       if (filled_area_increased(closed.contours, contours)) {
@@ -278,9 +283,9 @@ ManufacturingCleanupResult apply_manufacturing_cleanup(
     const double width = std::max(options.minimum_feature_width,
                                   options.minimum_bridge_width);
     if (width <= 0.0) return true;
-    const auto eroded = offset_polygons(result.contours, -width / 2.0);
+    const auto eroded = offset_polygons_impl(result.contours, -width / 2.0);
     if (!eroded.ok()) { result.error = eroded.error; return false; }
-    const auto opened = offset_polygons(eroded.contours, width / 2.0);
+    const auto opened = offset_polygons_impl(eroded.contours, width / 2.0);
     if (!opened.ok()) { result.error = opened.error; return false; }
     result.contours = opened.contours;
     return true;
@@ -289,10 +294,10 @@ ManufacturingCleanupResult apply_manufacturing_cleanup(
 
 
     if (options.minimum_hole_width <= 0.0) return true;
-    const auto expanded = offset_polygons(result.contours,
+    const auto expanded = offset_polygons_impl(result.contours,
                                           options.minimum_hole_width / 2.0);
     if (!expanded.ok()) { result.error = expanded.error; return false; }
-    const auto closed = offset_polygons(expanded.contours,
+    const auto closed = offset_polygons_impl(expanded.contours,
                                         -options.minimum_hole_width / 2.0);
     if (!closed.ok()) { result.error = closed.error; return false; }
     result.contours = closed.contours;

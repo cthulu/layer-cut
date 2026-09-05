@@ -13,7 +13,11 @@ export behavior is declared stable.
 - Confirm the page retains physical millimetre dimensions.
 - Confirm both imported documents contain the shared alignment marker and that
   its geometry overlays exactly when the documents are stacked.
-- Confirm group names are visible or identify the fallback selection workflow.
+- Assign the guide marker to Pen and leave the cut marker out of the Cut
+  operation.
+- Confirm the observed fallback: imported groups may be displayed only as
+  generic `Group` entries. Use stable ordering, visual styling, filenames, and
+  the alignment marker instead of relying on SVG group names.
 - Confirm groups can be ungrouped and independently selected.
 - Change a guide group to `Draw > Pen`.
 - Attach the guide group to the corresponding cut group.
@@ -24,10 +28,9 @@ export behavior is declared stable.
 
 ## Automated Acceptance Tests
 
-- Parse each paired cut and guide SVG and assert that the alignment marker
-  geometry has identical coordinates and attributes in both files.
-- Assert that the marker is emitted once per paired page and is included in the
-  path budget.
+Do not automate Design Space itself. Repository tests may compare paired SVG
+marker geometry, but import, operation assignment, stacking, and plotting remain
+manual checks.
 
 ## Manual Alignment Test
 
@@ -37,6 +40,9 @@ manual size or offset correction. Record any import scaling or alignment drift.
 
 ## Required Outcome
 
-Update the implementation specs with any Design Space behavior that differs from
-standard SVG expectations, especially group naming, metadata preservation, and
-operation assignment.
+Observed behavior: Design Space does not display the SVG group names and labels
+them `Group`. This is acceptable for the current workflow. Group names and SVG
+metadata remain useful for diagnostics, but must not be required for operation.
+The shared marker successfully aligns the cut and guide documents. The guide
+marker is assigned to Pen and the cut marker is excluded from Cut manually.
+Update future UI/export documentation if Design Space changes this behavior.

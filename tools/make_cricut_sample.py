@@ -61,11 +61,21 @@ def group(name: str, paths: list[str], fill: str, title: str | None = None,
 
 def document(width: float, height: float, groups: list[str], kind: str) -> str:
     body = "\n".join(groups)
+    marker = (
+        f'  <g id="alignment-marker" data-alignment-marker="true" '
+        f'data-alignment-marker-operation="{"draw" if kind == "guide" else "ignore"}" '
+        'fill="none" stroke="#ff00ff" stroke-width="0.25">\n'
+        '    <title>ALIGNMENT MARKER | shared by cut and guide</title>\n'
+        '    <circle cx="3.500000000" cy="3.500000000" r="1.25"/>\n'
+        '    <path d="M 1.500000000 3.500000000 L 5.500000000 3.500000000 '
+        'M 3.500000000 1.500000000 L 3.500000000 5.500000000"/>\n'
+        '  </g>'
+    )
     return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.9f}mm" '
             f'height="{height:.9f}mm" viewBox="0 0 {width:.9f} {height:.9f}" '
             f'data-cricut-prototype="true" data-output="{kind}">\n'
-            f"{body}\n</svg>\n")
+            f"{marker}\n{body}\n</svg>\n")
 
 
 def main() -> int:

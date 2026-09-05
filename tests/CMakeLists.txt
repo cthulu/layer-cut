@@ -78,6 +78,10 @@ add_executable(layer_cut_stacked_preview_test stacked_preview_test.cpp)
 target_link_libraries(layer_cut_stacked_preview_test PRIVATE layer_cut_engine)
 add_test(NAME layer_cut_stacked_preview_test COMMAND layer_cut_stacked_preview_test)
 
+add_executable(layer_cut_cricut_page_test cricut_page_test.cpp)
+target_link_libraries(layer_cut_cricut_page_test PRIVATE layer_cut_engine)
+add_test(NAME layer_cut_cricut_page_test COMMAND layer_cut_cricut_page_test)
+
 if(TARGET stb_image_write)
   add_executable(layer_cut_png_writer_test png_writer_test.cpp)
   target_link_libraries(layer_cut_png_writer_test PRIVATE layer_cut_engine)

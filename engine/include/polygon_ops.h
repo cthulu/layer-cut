@@ -37,6 +37,11 @@ PolygonOperationResult difference_polygons(
 PolygonOperationResult intersection_polygons(
     const std::vector<Contour>& subjects, const std::vector<Contour>& clips);
 
+// Offset closed contours by a signed distance in millimetres. Positive values
+// expand filled regions; negative values contract them.
+PolygonOperationResult offset_polygons(const std::vector<Contour>& contours,
+                                       double delta_mm);
+
 // Remove contours whose absolute area is below minimum_area in square mm.
 // This is an output cleanup step and must not be used to repair open contours.
 std::vector<Contour> remove_small_contours(

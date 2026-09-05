@@ -3,6 +3,7 @@
 #include "mesh.h"
 #include "polygon_ops.h"
 #include "png_writer.h"
+#include "cricut_page.h"
 #include "slicer.h"
 #include "stl_loader.h"
 #include "svg_writer.h"
@@ -23,6 +24,8 @@ struct ConfigHandle {
   double canvas_height = 0.0;
   int format = SLICER_FORMAT_SVG;
   int dpi = 300;
+  double cricut_gap = 3.0;
+  double cricut_guide_inset = 1.0;
   int cleanup_mode = 1;
   layer_cut::ManufacturingCleanupOptions cleanup;
   slicer_progress_callback_t progress_callback = nullptr;
@@ -32,8 +35,16 @@ struct LayerBytes {
   std::string svg;
   std::vector<uint8_t> png;
 };
+struct PageBytes {
+  std::string cut_svg;
+  std::string guide_svg;
+  int layer_start = 0;
+  int layer_count = 0;
+  int path_count = 0;
+};
 struct ResultHandle {
   std::vector<LayerBytes> layers;
+  std::vector<PageBytes> pages;
   std::vector<std::string> warnings;
 };
 
@@ -76,7 +87,10 @@ int slicer_config_set_canvas(slicer_config_t config, double width_mm, double hei
 }
 
 int slicer_config_set_format(slicer_config_t config, int format) {
-  if (!valid_handle(config) || (format != SLICER_FORMAT_SVG && format != SLICER_FORMAT_PNG)) {
+    if (!valid_handle(config) ||
+        (format != SLICER_FORMAT_SVG && format != SLICER_FORMAT_PNG &&
+         format != SLICER_FORMAT_CRICUT_NORMAL &&
+         format != SLICER_FORMAT_CRICUT_LARGE)) {
     fail("Unsupported output format"); return 0;
   }
   handle<ConfigHandle>(config)->format = format; return 1;
@@ -85,6 +99,24 @@ int slicer_config_set_format(slicer_config_t config, int format) {
 int slicer_config_set_dpi(slicer_config_t config, int dpi) {
   if (!valid_handle(config) || dpi <= 0) { fail("DPI must be positive"); return 0; }
   handle<ConfigHandle>(config)->dpi = dpi; return 1;
+}
+
+int slicer_config_set_cricut_gap(slicer_config_t config, double gap_mm) {
+  if (!valid_handle(config) || !std::isfinite(gap_mm)) {
+    fail("Cricut gap must be finite");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->cricut_gap = gap_mm;
+  return 1;
+}
+
+int slicer_config_set_cricut_guide_inset(slicer_config_t config, double inset_mm) {
+  if (!valid_handle(config) || !std::isfinite(inset_mm) || inset_mm <= 0.0) {
+    fail("Cricut guide inset must be positive and finite");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->cricut_guide_inset = inset_mm;
+  return 1;
 }
 
 int slicer_config_set_cleanup_mode(slicer_config_t config, int mode) {
@@ -137,6 +169,70 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
                                      total_layers, total_layers == 0 ? 1.0 : 0.0);
   }
   auto* result = new ResultHandle;
+
+  if (config_handle->format == SLICER_FORMAT_CRICUT_NORMAL ||
+      config_handle->format == SLICER_FORMAT_CRICUT_LARGE) {
+#ifndef LAYER_CUT_HAVE_CLIPPER
+    delete result;
+    fail("Cricut page output requires Clipper2");
+    return nullptr;
+#else
+    std::vector<layer_cut::SliceLayer> prepared_layers;
+    prepared_layers.reserve(sliced.layers.size());
+    for (const auto& layer : sliced.layers) {
+      const auto unioned = layer_cut::union_polygons(layer.contours);
+      if (!unioned.ok()) {
+        delete result;
+        fail(unioned.error);
+        return nullptr;
+      }
+      auto cleanup = config_handle->cleanup;
+      cleanup.mode = static_cast<layer_cut::CleanupMode>(config_handle->cleanup_mode);
+      const auto cleaned = layer_cut::apply_manufacturing_cleanup(unioned.contours, cleanup);
+      if (!cleaned.ok) {
+        delete result;
+        fail(cleaned.error);
+        return nullptr;
+      }
+      result->warnings.insert(result->warnings.end(), cleaned.warnings.begin(),
+                              cleaned.warnings.end());
+      auto prepared = layer;
+      prepared.contours = cleaned.contours;
+      prepared_layers.push_back(std::move(prepared));
+    }
+    layer_cut::CricutPageOptions page_options;
+    page_options.size = config_handle->format == SLICER_FORMAT_CRICUT_LARGE
+                            ? layer_cut::CricutPageSize::LARGE
+                            : layer_cut::CricutPageSize::NORMAL;
+    page_options.gap_mm = config_handle->cricut_gap;
+    const auto pages = layer_cut::build_cricut_pages(prepared_layers, page_options);
+    if (!pages.ok()) {
+      delete result;
+      fail(pages.error);
+      return nullptr;
+    }
+    result->pages.reserve(pages.pages.size());
+    for (const auto& page : pages.pages) {
+      PageBytes bytes;
+      bytes.cut_svg = layer_cut::make_cricut_cut_svg(page);
+      std::vector<std::string> guide_warnings;
+      bytes.guide_svg = layer_cut::make_cricut_guide_svg(
+          page, config_handle->cricut_guide_inset, &guide_warnings);
+      result->warnings.insert(result->warnings.end(), guide_warnings.begin(),
+                              guide_warnings.end());
+      bytes.layer_start = static_cast<int>(page.tiles.front().layer_index);
+      bytes.layer_count = static_cast<int>(page.tiles.size());
+      bytes.path_count = static_cast<int>(page.cut_path_count);
+      result->pages.push_back(std::move(bytes));
+    }
+    if (config_handle->progress_callback) {
+      config_handle->progress_callback(config_handle->progress_context,
+                                       total_layers, total_layers, 1.0);
+    }
+    return result;
+#endif
+  }
+
   result->layers.resize(sliced.layers.size());
   for (std::size_t i = 0; i < sliced.layers.size(); ++i) {
     const auto& layer = sliced.layers[i];
@@ -191,6 +287,58 @@ const char* slicer_result_layer_svg(slicer_result_t result, int index) {
 size_t slicer_result_layer_svg_size(slicer_result_t result, int index) {
   const char* value = slicer_result_layer_svg(result, index);
   return value == nullptr ? 0 : handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].svg.size();
+}
+
+int slicer_result_page_count(slicer_result_t result) {
+  if (!valid_handle(result)) {
+    fail("Result is null");
+    return 0;
+  }
+  return static_cast<int>(handle<ResultHandle>(result)->pages.size());
+}
+
+PageBytes* page_at(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->pages.size()) {
+    fail("Cricut page index is out of range");
+    return nullptr;
+  }
+  return &handle<ResultHandle>(result)->pages[static_cast<std::size_t>(index)];
+}
+
+const char* slicer_result_page_cut_svg(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? nullptr : value->cut_svg.c_str();
+}
+
+size_t slicer_result_page_cut_svg_size(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? 0 : value->cut_svg.size();
+}
+
+const char* slicer_result_page_guide_svg(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? nullptr : value->guide_svg.c_str();
+}
+
+size_t slicer_result_page_guide_svg_size(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? 0 : value->guide_svg.size();
+}
+
+int slicer_result_page_layer_start(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? -1 : value->layer_start;
+}
+
+int slicer_result_page_layer_count(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? 0 : value->layer_count;
+}
+
+int slicer_result_page_path_count(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? 0 : value->path_count;
 }
 
 const uint8_t* slicer_result_layer_png(slicer_result_t result, int index, size_t* size) {

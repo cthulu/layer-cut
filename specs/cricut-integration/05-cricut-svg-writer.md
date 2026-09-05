@@ -20,6 +20,8 @@ groups.
 - Count every emitted `<path>` toward the page budget.
 - Emit the shared alignment marker/registration geometry using the page model's
   exact coordinates.
+- Mark the cut-file marker with `data-alignment-marker-operation="ignore"`; the
+  user must leave it out of the Cut operation in Design Space.
 
 ## Guide SVG
 
@@ -32,6 +34,8 @@ groups.
 - Emit the exact same alignment marker geometry at the exact same coordinates as
   the paired cut SVG. The marker exists to align the two imported documents in
   Design Space, not as a cut or pen operation.
+- Mark the guide-file marker with `data-alignment-marker-operation="draw"`; the
+  marker is intended for the Pen operation.
 
 ## Naming
 
@@ -43,8 +47,10 @@ page_001_layers_000-019.guide.svg
 ```
 
 Use SVG `id`, `data-layer-index`, `data-guide-for`, and `<title>` where possible.
-Design Space behavior must be validated because standard SVG does not guarantee
-that all metadata becomes a visible layer name.
+Design Space currently imports these groups as generic `Group` entries rather
+than displaying the SVG names. Treat metadata as diagnostic only; rely on stable
+ordering, visual styling, page filenames, and the shared alignment marker for
+user guidance.
 
 ## Acceptance
 
