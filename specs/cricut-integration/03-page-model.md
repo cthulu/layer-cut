@@ -19,6 +19,7 @@ Define page data for:
 - Layer index and Z position.
 - Transformed cut contours.
 - Transformed guide contours.
+- Shared alignment marker/registration geometry in page coordinates.
 - Per-page path count.
 - Warnings and omitted guides.
 
@@ -33,6 +34,9 @@ reserved for a later step.
 - A guide named `Layer N+1 over Layer N` is placed in Layer N's tile.
 - Page coordinates use millimetres and a page viewBox origin of `(0, 0)`.
 - Layer Z metadata remains the original midpoint Z.
+- The alignment marker geometry and coordinates are generated once in the shared
+  page coordinate system and are identical in the cut and guide outputs. Its
+  purpose is to align the two separately imported documents in Design Space.
 
 ## Acceptance
 
@@ -40,3 +44,5 @@ reserved for a later step.
 - Both SVG writers consume the same transformed geometry.
 - Page and tile coordinates are deterministic.
 - No output-specific code recomputes placement independently.
+- The marker geometry and coordinates are identical in the paired cut and guide
+  pages.

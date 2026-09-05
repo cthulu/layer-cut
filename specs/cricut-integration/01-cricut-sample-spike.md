@@ -38,6 +38,9 @@ page_001_layers_000-004.guide.svg
 - Put each prototype guide in a named group such as `PEN GUIDE | Layer 001 over Layer 000 | Prototype`.
 - Put a guide in the previous layer's tile, not the next layer's tile.
 - Use distinct presentation colors for cut and guide groups.
+- Include the same visible alignment marker/registration geometry in both files,
+  using identical geometry and page coordinates, so the imported documents can be
+  correctly stacked in Design Space.
 - Include useful SVG `id`, `data-*`, and `<title>` metadata.
 - Use a provisional 5% scaled guide only for this spike; production uses true offsets.
 - Do not make this generator a runtime dependency of the engine.
@@ -48,6 +51,8 @@ Manually verify in Cricut Design Space that:
 
 - Both files upload successfully.
 - Physical page and layer dimensions are preserved.
+- The shared alignment marker is present in both files and overlays exactly when
+  the imported documents are stacked.
 - Groups are visible and independently selectable.
 - Guide groups can be changed to `Draw > Pen`.
 - A guide group can be attached to its corresponding cut layer.

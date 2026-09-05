@@ -6,6 +6,8 @@ add_library(layer_cut_engine STATIC
   src/slicer.cpp
   src/svg_writer.cpp
   src/png_writer.cpp
+  src/stl_writer.cpp
+  src/stacked_preview.cpp
   src/stl_loader.cpp
   src/layer_cut.cpp
 )

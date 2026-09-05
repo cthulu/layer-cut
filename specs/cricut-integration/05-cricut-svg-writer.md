@@ -18,6 +18,8 @@ groups.
 - Emit no decorative stroke for cut geometry.
 - Include layer index and Z metadata.
 - Count every emitted `<path>` toward the page budget.
+- Emit the shared alignment marker/registration geometry using the page model's
+  exact coordinates.
 
 ## Guide SVG
 
@@ -27,6 +29,9 @@ groups.
 - Place each guide in the previous layer's tile.
 - Emit no guide for an interface that cannot be safely generated.
 - Make guide groups visually distinct, but do not rely on color to set Cricut's operation.
+- Emit the exact same alignment marker geometry at the exact same coordinates as
+  the paired cut SVG. The marker exists to align the two imported documents in
+  Design Space, not as a cut or pen operation.
 
 ## Naming
 
@@ -47,5 +52,7 @@ that all metadata becomes a visible layer name.
 - Physical dimensions are correct.
 - Groups and paths have deterministic order.
 - Cut and guide files have identical page geometry.
+- Paired cut and guide files contain identical alignment marker geometry and
+  coordinates.
 - Holes and multiple contours remain correct.
 - Path budgets are enforced before writing.

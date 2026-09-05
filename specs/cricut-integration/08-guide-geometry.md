@@ -36,3 +36,9 @@ Define behavior for:
 The guide SVG is still imported as Cut by default. Documentation must instruct
 the user to select the named guide group, change it to `Draw > Pen`, and attach
 it to the corresponding cut layer before plotting.
+
+The guide page also includes the shared alignment marker/registration geometry
+defined by the page model. Its shape and page coordinates must be identical to
+the marker in the paired cut SVG so the two separately imported documents can be
+stacked correctly in Design Space. The marker must not be treated as guide
+geometry or assigned to `Draw > Pen`.

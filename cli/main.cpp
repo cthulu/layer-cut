@@ -3,6 +3,8 @@
 #include "stl_loader.h"
 #include "svg_writer.h"
 #include "png_writer.h"
+#include "stacked_preview.h"
+#include "stl_writer.h"
 
 #include <CLI/CLI.hpp>
 
@@ -71,6 +73,7 @@ int main(int argc, char* argv[]) {
   double minimum_hole_width = 0.0;
   double minimum_bridge_width = 0.0;
   std::string stl_path;
+  std::string stacked_stl_path;
 
   app.add_option("-o,--output-dir", output_dir,
                  "Output directory for generated layers (default: output)");
@@ -101,6 +104,8 @@ int main(int argc, char* argv[]) {
   app.add_option("--min-bridge-width", minimum_bridge_width,
                  "Minimum bridge width in millimetres")
       ->check(CLI::Range(0.0, 1000000.0));
+  app.add_option("--stacked-stl", stacked_stl_path,
+                 "Optional watertight stacked-layer preview STL path");
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
       ->required();
 
@@ -154,6 +159,8 @@ int main(int argc, char* argv[]) {
   }
 
   std::size_t exported = 0;
+  std::vector<layer_cut::SliceLayer> prepared_layers;
+  prepared_layers.reserve(sliced.layers.size());
   print_progress(0, sliced.layers.size());
   for (const auto& layer : sliced.layers) {
     const auto cleaned = layer_cut::union_polygons(layer.contours);
@@ -187,6 +194,9 @@ int main(int argc, char* argv[]) {
       std::cerr << "\n";
     }
     const auto& filtered = cleaned_for_cut.contours;
+    auto prepared_layer = layer;
+    prepared_layer.contours = filtered;
+    prepared_layers.push_back(std::move(prepared_layer));
     layer_cut::SvgOptions svg_options;
     svg_options.layer_index = layer.index;
     svg_options.layer_z = layer.z;
@@ -223,6 +233,25 @@ int main(int argc, char* argv[]) {
     }
     ++exported;
     print_progress(exported, sliced.layers.size());
+  }
+
+  if (!stacked_stl_path.empty()) {
+    const auto preview =
+        layer_cut::make_stacked_preview(prepared_layers, layer_height);
+    if (!preview.ok()) {
+      std::cerr << "Error: Stacked STL generation failed: " << preview.error
+                << "\n";
+      return 1;
+    }
+    std::string write_error;
+    if (!layer_cut::write_ascii_stl_file(stacked_stl_path, preview.triangles,
+                                         "layer_cut_stacked_preview",
+                                         &write_error)) {
+      std::cerr << "Error: " << write_error << "\n";
+      return 1;
+    }
+    std::cout << "Generated stacked STL with " << preview.triangles.size()
+              << " triangle(s) at " << stacked_stl_path << "\n";
   }
 
   std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path
