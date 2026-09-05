@@ -1,11 +1,18 @@
-STEP 14 — File import UI
-  Goal: User can drag-drop or browse for an STL file.
-  Action: macos-app/ImportView.swift
-  Tech:
-    - SwiftUI FileImporter or DropZone (drag-and-drop overlay)
-    - Validate file extension .stl
-    - Show file size and basic info (triangles, bounding box)
-    - Error handling: invalid STL, corrupted file, unsupported ASCII STL, and
-      configurable byte/triangle/memory limits.
-    - Display the assumed millimetre units and normalized bounds; do not infer
-      units from the STL header.
+# STEP 14 - File Import UI
+
+Priority: P0
+
+## Goal
+
+Load an STL through a native macOS file dialog or drag-and-drop flow.
+
+## Requirements
+
+- Use SwiftUI `fileImporter` with an STL content type and drag-and-drop support.
+- Pass the selected URL to the C++ loader; never parse STL in Swift.
+- Display filename, file size, triangle count, raw bounds, and normalized bounds.
+- Display the millimetre assumption; never infer units from STL metadata.
+- Surface invalid, truncated, non-finite, oversized, and unsupported ASCII STL
+  diagnostics from the engine.
+- Keep security-scoped URL access alive only for the operation that needs it.
+- Make the imported document the source for the active profile and viewport.

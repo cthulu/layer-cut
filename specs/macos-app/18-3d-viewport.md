@@ -1,13 +1,24 @@
-STEP 18 — 3D viewport (model preview)
-  Goal: Show the 3D model with a slice plane indicator.
-  Action: macos-app/Viewport3DView.swift
-  Tech:
-    - Use SceneKit (built into macOS) — no external deps
-    - Load the validated/normalized mesh through the engine boundary; avoid a
-      second Swift parser with different unit or topology behavior.
-    - Draw a horizontal plane at the current layer's Z position
-    - Highlight active layer in preview panel when viewport interacted
-    - Orbit camera: pan, zoom, rotate via SceneKit SCNNode gestures
-    - AI prompt suggestion:
-      "Create a SceneKit 3D viewport in SwiftUI that loads a binary
-       STL and shows a movable slice plane"
+# STEP 18 - RealityKit 3D Viewport
+
+Priority: P0
+
+## Goal
+
+Show the transformed mesh, orientation, scale, and active slicing plane.
+
+## Requirements
+
+- Use SwiftUI with `RealityView` or an equivalent RealityKit container.
+- Build the displayed mesh from the engine-provided mesh snapshot.
+- Do not parse STL or use a second topology implementation in Swift.
+- Use a stable world-coordinate contract in millimetres.
+- Support orbit, pan, zoom, axis presets, fine rotation, and scale preview.
+- Draw a horizontal slice plane at the active layer Z.
+- Link layer selection and viewport highlighting.
+- Reset camera and transform independently.
+- Keep viewport transforms synchronized with the active profile transform.
+
+## Rendering Boundary
+
+Keep RealityKit-specific mesh conversion in a Swift adapter. The C ABI exposes
+plain vertex/index data only; it must not expose Swift, RealityKit, or Metal types.

@@ -1,0 +1,44 @@
+# macOS App Implementation Plan
+
+## Architecture
+
+- SwiftUI macOS frontend.
+- RealityKit 3D viewport.
+- C++17 engine behind the pure C ABI.
+- YAML profile persistence.
+- macOS-first frontend; Linux is a future separate frontend over shared engine
+  and profile contracts.
+
+## Execution Order
+
+1. `11-architecture.md`
+2. `12-tooling.md`
+3. `13-xcode-project.md`
+4. Engine transform and mesh-snapshot C ABI prerequisites.
+5. `14-file-import-ui.md`
+6. `15-parameters-panel.md`
+7. `16-engine-integration.md`
+8. `18-3d-viewport.md`
+9. `17-layer-preview.md`
+10. `19-export-workflow.md`
+11. `20-polish-packaging.md`
+
+The engine transform and mesh snapshot work is intentionally listed between
+project setup and UI implementation because the viewport must not parse STL a
+second time and exports must use the same transform shown in the viewport.
+
+## Resolved Inconsistencies
+
+- SceneKit was replaced by RealityKit.
+- The old SVG/PNG-only output selector now includes Cricut and stacked STL.
+- The old per-layer-only export workflow now includes pages and combined pages.
+- The old fixed parameter range no longer conflicts with the 1 mm default profile.
+- Progress/cancellation are required at the service boundary rather than left as
+  an ambiguous future UI feature.
+- Full Xcode is a prerequisite; Command Line Tools alone are insufficient.
+
+## Deferred
+
+- Cricut PNG pages are not implemented.
+- Automated Design Space validation is not planned.
+- Linux UI implementation is not part of the macOS-first milestone.

@@ -1,11 +1,28 @@
-STEP 20 — Polish & packaging
-  Goal: App ready for distribution.
-  Action: Finalize UI, add settings, code sign, create .dmg.
-  Tech:
-    - Settings: default layer height, output format, DPI for PNG
-    - Dark mode support (SwiftUI automatic)
-    - Code sign: codesign --sign "Developer ID" LayerCut.app
-    - Create DMG: hdiutil create -format ADIF
-                    -srcfolder LayerCut.app layer-cut.dmg
-    - Include hardened runtime, entitlements, architecture/universal-binary
-      decision, reproducible versioning, and notarization prerequisites.
+# STEP 20 - Polish and Packaging
+
+Priority: P2
+
+## Settings
+
+- YAML profile management and default profile selection.
+- Default output directory.
+- Recent STL documents.
+- System appearance behavior.
+- About screen with licenses and engine version.
+
+## Packaging
+
+- Use `xcodebuild archive` for Release builds.
+- Sign with an explicit Developer ID identity when configured.
+- Enable hardened runtime and document entitlements.
+- Decide arm64-only versus universal output before release.
+- Create a DMG with `hdiutil` only after signing.
+- Notarize and staple the app when distribution credentials exist.
+- Include reproducible version metadata.
+- Include third-party license notices for Swift packages and engine dependencies.
+
+## Acceptance
+
+- A clean machine can install and launch the signed app.
+- File import, RealityKit rendering, slicing, Cricut page export, and profile
+  persistence work in a Release build.

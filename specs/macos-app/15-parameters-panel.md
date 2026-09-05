@@ -1,10 +1,37 @@
-STEP 15 — Slicing parameters panel
-  Goal: Configurable layer height, model dimensions, output format.
-  Action: macos-app/ParametersPanel.swift
-  Tech:
-    - Sliders/steppers: layer height (0.1–0.3mm, step 0.01)
-    - Show model X/Y/Z bounds read-only after normalization. Distinguish
-      those from optional output canvas width/height and never silently scale.
-    - Segmented control: output format (SVG / PNG)
-    - "Slice" button triggers engine call
-    - Show estimated layer count and output file count
+# STEP 15 - Profile and Parameters UI
+
+Priority: P0
+
+## Goal
+
+Provide a profile-driven UI for transforms, slicing, cleanup, and output formats.
+
+## Default Profile
+
+Create a built-in `Default` profile with:
+
+- Layer height: 1.0 mm.
+- Identity transform.
+- Output: `cricut-normal`.
+- Fixed packing.
+- Cricut gap: 3 mm.
+- Guide inset: 1 mm.
+- Cleanup mode: warn.
+
+## UI Groups
+
+- Model orientation: axis preset, fine rotation, scale.
+- Slicing: layer height and estimated layer count.
+- Bounds: normalized model bounds read-only; output canvas separate.
+- Cleanup: preserve, warn, apply, and thresholds.
+- Output: SVG, PNG, Cricut normal, Cricut large, combined Cricut SVG, stacked STL.
+- Cricut: packing, gap, guide inset, and page estimate.
+
+## Profiles
+
+- Allow creating, renaming, duplicating, editing, and deleting user profiles.
+- Store profiles as versioned YAML.
+- Load from `$XDG_CONFIG_HOME/layer-cut` or the macOS Application Support fallback.
+- Validate on load and recover from invalid files using the built-in default.
+- Write atomically through a temporary file and rename.
+- Do not silently change a profile when an output format gains new options.
