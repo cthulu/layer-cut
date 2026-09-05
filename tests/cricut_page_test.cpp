@@ -52,6 +52,14 @@ int main() {
       guide.find("PEN GUIDE | Layer 001 over Layer 000") == std::string::npos) {
     return 3;
   }
+  const std::string combined = layer_cut::make_cricut_combined_svg(page, 1.0);
+  if (combined.find("id=\"alignment-marker\"") != std::string::npos ||
+      combined.find("id=\"cut-layers\"") == std::string::npos ||
+      combined.find("id=\"pen-layers\"") == std::string::npos ||
+      combined.find("data-operation=\"cut\"") == std::string::npos ||
+      combined.find("data-operation=\"draw\"") == std::string::npos) {
+    return 4;
+  }
 
   options.gap_mm = 3.0;
   options.size = layer_cut::CricutPageSize::NORMAL;
@@ -61,28 +69,28 @@ int main() {
       options);
   if (!split.ok() || split.pages.size() != 2 ||
       split.pages[0].tiles.size() != 4 || split.pages[1].tiles.size() != 1) {
-    return 4;
+    return 5;
   }
 
   options.gap_mm = -11.0;
   const auto invalid = layer_cut::build_cricut_pages({layer(0, 0.5)}, options);
-  if (invalid.ok()) return 5;
+  if (invalid.ok()) return 6;
 
   options.gap_mm = -1.0;
   const auto overlapping = layer_cut::build_cricut_pages(
       {layer(0, 0.5), layer(1, 1.5)}, options);
-  if (!overlapping.ok() || overlapping.warnings.empty()) return 6;
+  if (!overlapping.ok() || overlapping.warnings.empty()) return 7;
 
   options.gap_mm = 3.0;
   options.size = layer_cut::CricutPageSize::LARGE;
   const auto large = layer_cut::build_cricut_pages({layer(0, 0.5)}, options);
-  if (!large.ok() || large.pages.front().height_mm != 608.0) return 7;
+  if (!large.ok() || large.pages.front().height_mm != 608.0) return 8;
 
   layer_cut::SliceLayer oversized;
   oversized.index = 0;
   oversized.z = 0.5;
   oversized.contours.push_back({{{0, 0}, {291, 0}, {291, 1}, {0, 1}}, false,
                                 291.0});
-  if (layer_cut::build_cricut_pages({oversized}, options).ok()) return 8;
+  if (layer_cut::build_cricut_pages({oversized}, options).ok()) return 9;
   return 0;
 }

@@ -75,6 +75,7 @@ int main(int argc, char* argv[]) {
   double minimum_bridge_width = 0.0;
   double cricut_gap = 3.0;
   double cricut_guide_inset = 1.0;
+  bool cricut_combined = false;
   std::string stl_path;
   std::string stacked_stl_path;
 
@@ -111,6 +112,8 @@ int main(int argc, char* argv[]) {
                  "Cricut tile gap in millimetres (default: 3)");
   app.add_option("--cricut-guide-inset", cricut_guide_inset,
                  "Cricut guide inset in millimetres (default: 1)");
+  app.add_flag("--cricut-combined", cricut_combined,
+               "Write one SVG per Cricut page with cut and pen groups");
   app.add_option("--stacked-stl", stacked_stl_path,
                  "Optional watertight stacked-layer preview STL path");
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
@@ -131,6 +134,10 @@ int main(int argc, char* argv[]) {
       (canvas_width != 0.0 && canvas_width <= 0.0) ||
       (canvas_height != 0.0 && canvas_height <= 0.0)) {
     std::cerr << "Error: canvas dimensions must both be positive or omitted.\n";
+    return 2;
+  }
+  if (cricut_combined && format != "cricut-normal" && format != "cricut-large") {
+    std::cerr << "Error: --cricut-combined requires a Cricut page format.\n";
     return 2;
   }
 
@@ -218,17 +225,28 @@ int main(int argc, char* argv[]) {
           std::to_string(page.tiles.front().layer_index) + "-" +
           (page.tiles.back().layer_index < 1000 ? std::string(3 - std::to_string(page.tiles.back().layer_index).size(), '0') : "") +
           std::to_string(page.tiles.back().layer_index);
-      const auto cut_path = std::filesystem::path(output_dir) / (prefix + ".cut.svg");
-      const auto guide_path = std::filesystem::path(output_dir) / (prefix + ".guide.svg");
       std::vector<std::string> guide_warnings;
-      const std::string guide_svg = layer_cut::make_cricut_guide_svg(
-          page, cricut_guide_inset, &guide_warnings);
-      std::ofstream cut(cut_path);
-      std::ofstream guide(guide_path);
-      if (!cut || !guide || !(cut << layer_cut::make_cricut_cut_svg(page)) ||
-          !(guide << guide_svg)) {
-        std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
-        return 1;
+      if (cricut_combined) {
+        const auto output_path = std::filesystem::path(output_dir) / (prefix + ".svg");
+        std::ofstream output(output_path);
+        const std::string combined = layer_cut::make_cricut_combined_svg(
+            page, cricut_guide_inset, &guide_warnings);
+        if (!output || !(output << combined)) {
+          std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
+          return 1;
+        }
+      } else {
+        const auto cut_path = std::filesystem::path(output_dir) / (prefix + ".cut.svg");
+        const auto guide_path = std::filesystem::path(output_dir) / (prefix + ".guide.svg");
+        const std::string guide_svg = layer_cut::make_cricut_guide_svg(
+            page, cricut_guide_inset, &guide_warnings);
+        std::ofstream cut(cut_path);
+        std::ofstream guide(guide_path);
+        if (!cut || !guide || !(cut << layer_cut::make_cricut_cut_svg(page)) ||
+            !(guide << guide_svg)) {
+          std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
+          return 1;
+        }
       }
       for (const std::string& warning : guide_warnings) {
         std::cerr << "Warning: page " << page.page_index << ": " << warning << "\n";

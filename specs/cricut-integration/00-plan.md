@@ -24,6 +24,8 @@ independent.
 - Reject an oversized layer instead of scaling or splitting it.
 - Enforce a conservative 4,500-path limit per SVG page.
 - Generate separate `.cut.svg` and `.guide.svg` files for every page.
+- Support an optional combined SVG page form with grouped cut and pen layers and
+  no alignment marker.
 - Cricut PNG pages are explicitly deferred and are not implemented by this plan.
 - Use one guide file per page, with one independently selectable guide group per interface.
 - Use true inward offsets in millimetres for production guides.

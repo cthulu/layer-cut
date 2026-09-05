@@ -260,4 +260,62 @@ std::string make_cricut_guide_svg(const CricutPage& page, double inset_mm,
   return output.str();
 }
 
+std::string make_cricut_combined_svg(const CricutPage& page, double inset_mm,
+                                     std::vector<std::string>* warnings) {
+  std::ostringstream output;
+  output << page_header(page, "combined");
+  output << std::fixed << std::setprecision(9);
+  output << "  <g id=\"cut-layers\" data-operation=\"cut\">\n";
+  for (const CricutTile& tile : page.tiles) {
+    output << "    <g id=\"cut-layer-" << std::setw(3) << std::setfill('0')
+           << tile.layer_index << "\" fill=\"black\" fill-rule=\"evenodd\""
+              " stroke=\"none\" data-layer-index=\""
+           << tile.layer_index << "\">\n";
+    for (const Contour& contour : tile.contours) {
+      append_path(output, contour.points, tile.origin_x, tile.origin_y, "      ");
+    }
+    output << "    </g>\n";
+  }
+  output << "  </g>\n  <g id=\"pen-layers\" data-operation=\"draw\">\n";
+  for (std::size_t position = 1; position < page.tiles.size(); ++position) {
+    const CricutTile& previous = page.tiles[position - 1];
+    const CricutTile& next = page.tiles[position];
+    std::vector<Contour> guide_contours = next.contours;
+#ifdef LAYER_CUT_HAVE_CLIPPER
+    if (!std::isfinite(inset_mm) || inset_mm <= 0.0) {
+      if (warnings) warnings->push_back("Guide inset must be positive; guide omitted");
+      continue;
+    }
+    const auto offset = offset_polygons(next.contours, -inset_mm);
+    const auto outside = offset.ok()
+                             ? difference_polygons(offset.contours, previous.contours)
+                             : PolygonOperationResult{};
+    if (!offset.ok() || !outside.ok() || !outside.contours.empty() ||
+        offset.contours.empty()) {
+      if (warnings) {
+        warnings->push_back("Guide omitted for layer " +
+                            std::to_string(next.layer_index) +
+                            ": inset is invalid or not contained by previous layer");
+      }
+      continue;
+    }
+    guide_contours = offset.contours;
+#else
+    if (warnings) warnings->push_back("Guide inset unavailable without Clipper2");
+#endif
+    output << "    <g id=\"pen-guide-" << std::setw(3) << std::setfill('0')
+           << next.layer_index << "-over-" << std::setw(3) << previous.layer_index
+           << "\" fill=\"none\" stroke=\"#1769aa\" stroke-width=\"0.25\""
+              " data-guide-layer=\""
+           << next.layer_index << "\" data-previous-layer=\"" << previous.layer_index
+           << "\">\n";
+    for (const Contour& contour : guide_contours) {
+      append_path(output, contour.points, previous.origin_x, previous.origin_y, "      ");
+    }
+    output << "    </g>\n";
+  }
+  output << "  </g>\n</svg>\n";
+  return output.str();
+}
+
 }  // namespace layer_cut

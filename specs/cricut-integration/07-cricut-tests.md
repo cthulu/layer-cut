@@ -30,6 +30,8 @@ Cover:
 - Generate a multi-page output from a synthetic layer set.
 - Verify cut and guide SVGs have equal page dimensions.
 - Verify all emitted path counts.
+- Verify combined SVGs contain `cut-layers` and `pen-layers` groups and no
+  alignment marker.
 - Verify existing `svg` and `png` CLI tests remain unchanged.
 - Do not add automated Design Space validation; Cricut application behavior is
   recorded through the manual validation artifact only.

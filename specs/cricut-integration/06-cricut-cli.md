@@ -27,6 +27,7 @@ Add options equivalent to:
 --packing fixed
 --cricut-gap 3
 --cricut-guide-inset 1
+--cricut-combined
 ```
 
 The first implementation supports only `fixed`. Reserve `tight-packing` and
@@ -36,6 +37,9 @@ return a clear unsupported-strategy error until its spec is implemented.
 
 - Create the output directory as the existing CLI does.
 - Generate both cut and guide files for every page.
+- When `--cricut-combined` is supplied with a Cricut format, generate one
+  `page_*.svg` per page instead of separate `.cut.svg` and `.guide.svg` files.
+- Reject `--cricut-combined` with non-Cricut formats.
 - Report page count, layer ranges, path counts, and warnings.
 - Report omitted guides and their reasons.
 - Generate the shared alignment marker in both paired files with identical

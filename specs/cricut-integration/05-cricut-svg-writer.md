@@ -37,6 +37,18 @@ groups.
 - Mark the guide-file marker with `data-alignment-marker-operation="draw"`; the
   marker is intended for the Pen operation.
 
+## Combined SVG Mode
+
+Support an optional single-file page form. It must:
+
+- Emit one `page_*.svg` file per page.
+- Contain a `cut-layers` group with `data-operation="cut"`.
+- Contain a `pen-layers` group with `data-operation="draw"`.
+- Include all cut and valid pen-guide groups in their respective parent group.
+- Omit alignment-marker geometry entirely.
+- Preserve the same page dimensions, tile coordinates, and guide inset as the
+  separate-file form.
+
 ## Naming
 
 Use:

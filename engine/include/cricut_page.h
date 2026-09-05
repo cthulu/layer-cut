@@ -50,5 +50,8 @@ std::string make_cricut_cut_svg(const CricutPage& page);
 std::string make_cricut_guide_svg(const CricutPage& page,
                                   double inset_mm = 1.0,
                                   std::vector<std::string>* warnings = nullptr);
+std::string make_cricut_combined_svg(const CricutPage& page,
+                                     double inset_mm = 1.0,
+                                     std::vector<std::string>* warnings = nullptr);
 
 }  // namespace layer_cut
