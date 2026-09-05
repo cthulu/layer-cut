@@ -43,7 +43,7 @@ see `BUILDING.md` for native macOS and cross-platform instructions.
 
 ## Implementation Order
 
-Steps are numbered 01–20 and stored in `steps/`. Execute sequentially — each step produces a verifiable artifact (compiling code + passing tests).
+Specs are numbered 01–20 and organized under `specs/initial-app/` for the implemented engine/CLI and `specs/macos-app/` for the deferred macOS application. Execute sequentially — each step produces a verifiable artifact (compiling code + passing tests).
 
 ## Dependencies
 

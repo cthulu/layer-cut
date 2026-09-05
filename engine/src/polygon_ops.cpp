@@ -42,19 +42,26 @@ bool to_paths(const std::vector<Contour>& contours,
 
 PolygonOperationResult from_paths(const Clipper2Lib::Paths64& paths);
 
-double perimeter(const Contour& contour) {
-  double length = 0.0;
-  for (std::size_t i = 0; i < contour.points.size(); ++i) {
-    const Vec2& a = contour.points[i];
-    const Vec2& b = contour.points[(i + 1) % contour.points.size()];
-    length += std::hypot(b.x - a.x, b.y - a.y);
+bool contains_point(const std::vector<Vec2>& polygon, const Vec2& point) {
+  bool inside = false;
+  for (std::size_t i = 0, j = polygon.size() - 1; i < polygon.size();
+       j = i++) {
+    const Vec2& a = polygon[i];
+    const Vec2& b = polygon[j];
+    const bool crosses = ((a.y > point.y) != (b.y > point.y)) &&
+                         (point.x < (b.x - a.x) * (point.y - a.y) /
+                                        (b.y - a.y) + a.x);
+    if (crosses) inside = !inside;
   }
-  return length;
+  return inside;
 }
 
-double estimated_width(const Contour& contour) {
-  const double length = perimeter(contour);
-  return length > 0.0 ? 2.0 * std::abs(contour.signed_area) / length : 0.0;
+void normalize_contour(Contour& contour) {
+  double area = contour.signed_area;
+  if ((contour.hole && area > 0.0) || (!contour.hole && area < 0.0)) {
+    std::reverse(contour.points.begin(), contour.points.end());
+    contour.signed_area = -area;
+  }
 }
 
 PolygonOperationResult from_closed_paths(const Clipper2Lib::Paths64& paths) {
@@ -73,10 +80,63 @@ PolygonOperationResult from_closed_paths(const Clipper2Lib::Paths64& paths) {
       contour.signed_area += a.x * b.y - b.x * a.y;
     }
     contour.signed_area *= 0.5;
-    contour.hole = contour.signed_area < 0.0;
     contours.push_back(std::move(contour));
   }
+
+  // Clipper offset output orientation is not a reliable hole contract for
+  // polygons with touching or newly split regions. Reconstruct nesting depth
+  // from containment, then normalize the engine's outer=CCW/hole=CW winding.
+  for (std::size_t i = 0; i < contours.size(); ++i) {
+    std::size_t nesting_depth = 0;
+    for (std::size_t j = 0; j < contours.size(); ++j) {
+      if (i != j && contains_point(contours[j].points, contours[i].points[0])) {
+        ++nesting_depth;
+      }
+    }
+    contours[i].hole = (nesting_depth % 2) == 1;
+    normalize_contour(contours[i]);
+  }
   return {std::move(contours), ""};
+}
+
+double filled_area(const std::vector<Contour>& contours) {
+  double area = 0.0;
+  for (const Contour& contour : contours) {
+    area += contour.hole ? -std::abs(contour.signed_area)
+                         : std::abs(contour.signed_area);
+  }
+  return area;
+}
+
+bool filled_area_increased(const std::vector<Contour>& first,
+                           const std::vector<Contour>& second) {
+  return filled_area(first) > filled_area(second) + 1e-6;
+}
+
+bool filled_area_decreased(const std::vector<Contour>& first,
+                           const std::vector<Contour>& second) {
+  return filled_area(first) < filled_area(second) - 1e-6;
+}
+
+bool nearly_equal_contour(const Contour& first, const Contour& second) {
+  if (first.hole != second.hole || first.points.size() != second.points.size() ||
+      std::abs(first.signed_area - second.signed_area) > 1e-7) return false;
+  const double scale = std::max(1.0, std::sqrt(std::abs(first.signed_area)));
+  const double tolerance = 1e-6 * scale;
+  for (std::size_t i = 0; i < first.points.size(); ++i) {
+    if (std::abs(first.points[i].x - second.points[i].x) > tolerance ||
+        std::abs(first.points[i].y - second.points[i].y) > tolerance) return false;
+  }
+  return true;
+}
+
+bool contours_equal(const std::vector<Contour>& first,
+                    const std::vector<Contour>& second) {
+  if (first.size() != second.size()) return false;
+  for (std::size_t i = 0; i < first.size(); ++i) {
+    if (!nearly_equal_contour(first[i], second[i])) return false;
+  }
+  return true;
 }
 
 PolygonOperationResult offset_polygons(const std::vector<Contour>& contours,
@@ -172,50 +232,119 @@ ManufacturingCleanupResult apply_manufacturing_cleanup(
   }
   if (options.mode == CleanupMode::PRESERVE) return result;
 
-  for (const Contour& contour : contours) {
-    const double width = estimated_width(contour);
-    if (options.minimum_feature_width > 0.0 && width < options.minimum_feature_width)
-      result.warnings.push_back("Contour " + std::to_string(&contour - contours.data()) +
-                                " is narrower than the minimum feature width");
-    if (contour.hole && options.minimum_hole_width > 0.0 && width < options.minimum_hole_width)
-      result.warnings.push_back("Hole " + std::to_string(&contour - contours.data()) +
-                                " is narrower than the minimum hole width");
-    if (!contour.hole && options.minimum_island_area > 0.0 &&
-        std::abs(contour.signed_area) < options.minimum_island_area)
-      result.warnings.push_back("Island " + std::to_string(&contour - contours.data()) +
-                                " is smaller than the minimum island area");
-    if (!contour.hole && options.minimum_bridge_width > 0.0 &&
-        width < options.minimum_bridge_width)
-      result.warnings.push_back("Contour " + std::to_string(&contour - contours.data()) +
-                                " may contain a bridge narrower than the minimum bridge width");
+  if (options.mode == CleanupMode::WARN) {
+    const auto probe = options;
+    if (probe.minimum_feature_width > 0.0 || probe.minimum_bridge_width > 0.0) {
+      const double width = std::max(probe.minimum_feature_width,
+                                    probe.minimum_bridge_width);
+      const auto eroded = offset_polygons(contours, -width / 2.0);
+      if (!eroded.ok()) { result.ok = false; result.error = eroded.error; return result; }
+      const auto opened = offset_polygons(eroded.contours, width / 2.0);
+      if (!opened.ok()) { result.ok = false; result.error = opened.error; return result; }
+      if (filled_area_decreased(opened.contours, contours)) {
+        for (std::size_t i = 0; i < contours.size(); ++i) {
+          result.warnings.push_back("Contour " + std::to_string(i) +
+                                    " contains a feature narrower than the minimum width");
+        }
+      }
+    }
+    if (probe.minimum_hole_width > 0.0) {
+      const auto expanded = offset_polygons(contours, probe.minimum_hole_width / 2.0);
+      if (!expanded.ok()) { result.ok = false; result.error = expanded.error; return result; }
+      const auto closed = offset_polygons(expanded.contours,
+                                          -probe.minimum_hole_width / 2.0);
+      if (!closed.ok()) { result.ok = false; result.error = closed.error; return result; }
+      if (filled_area_increased(closed.contours, contours)) {
+        for (std::size_t i = 0; i < contours.size(); ++i) {
+          if (contours[i].hole)
+            result.warnings.push_back("Hole " + std::to_string(i) +
+                                      " is narrower than the minimum hole width");
+        }
+      }
+    }
+    for (std::size_t i = 0; i < contours.size(); ++i) {
+      const Contour& contour = contours[i];
+      if (!contour.hole && options.minimum_island_area > 0.0 &&
+          std::abs(contour.signed_area) < options.minimum_island_area)
+        result.warnings.push_back("Island " + std::to_string(i) +
+                                  " is smaller than the minimum island area");
+    }
+    result.contours = contours;
+    result.changed = false;
+    return result;
   }
-  if (options.mode == CleanupMode::WARN) return result;
 
-  const double opening_width = std::max(options.minimum_feature_width,
-                                        options.minimum_bridge_width);
-  if (opening_width > 0.0) {
-    const auto eroded = offset_polygons(result.contours, -opening_width / 2.0);
-    if (!eroded.ok()) { result.ok = false; result.error = eroded.error; return result; }
-    const auto opened = offset_polygons(eroded.contours, opening_width / 2.0);
-    if (!opened.ok()) { result.ok = false; result.error = opened.error; return result; }
+  const auto apply_opening = [&]() -> bool {
+    const double width = std::max(options.minimum_feature_width,
+                                  options.minimum_bridge_width);
+    if (width <= 0.0) return true;
+    const auto eroded = offset_polygons(result.contours, -width / 2.0);
+    if (!eroded.ok()) { result.error = eroded.error; return false; }
+    const auto opened = offset_polygons(eroded.contours, width / 2.0);
+    if (!opened.ok()) { result.error = opened.error; return false; }
     result.contours = opened.contours;
-  }
-  if (options.minimum_hole_width > 0.0) {
-    const auto expanded = offset_polygons(result.contours, options.minimum_hole_width / 2.0);
-    if (!expanded.ok()) { result.ok = false; result.error = expanded.error; return result; }
-    const auto closed = offset_polygons(expanded.contours, -options.minimum_hole_width / 2.0);
-    if (!closed.ok()) { result.ok = false; result.error = closed.error; return result; }
+    return true;
+  };
+  const auto apply_closing = [&]() -> bool {
+
+
+    if (options.minimum_hole_width <= 0.0) return true;
+    const auto expanded = offset_polygons(result.contours,
+                                          options.minimum_hole_width / 2.0);
+    if (!expanded.ok()) { result.error = expanded.error; return false; }
+    const auto closed = offset_polygons(expanded.contours,
+                                        -options.minimum_hole_width / 2.0);
+    if (!closed.ok()) { result.error = closed.error; return false; }
     result.contours = closed.contours;
-  }
-  if (options.minimum_island_area > 0.0) {
+    return true;
+  };
+  const auto filter_islands = [&]() {
+    if (options.minimum_island_area <= 0.0) return;
     std::vector<Contour> retained;
     for (const Contour& contour : result.contours) {
       if (contour.hole || std::abs(contour.signed_area) >= options.minimum_island_area)
         retained.push_back(contour);
     }
     result.contours = std::move(retained);
+  };
+
+  std::vector<Contour> opened = result.contours;
+  if (options.minimum_feature_width > 0.0 || options.minimum_bridge_width > 0.0) {
+    if (!apply_opening()) { result.ok = false; return result; }
+    opened = result.contours;
   }
-  result.changed = result.contours.size() != contours.size();
+  result.contours = opened;
+  if (options.minimum_hole_width > 0.0) {
+    if (!apply_closing()) { result.ok = false; return result; }
+  }
+  std::vector<Contour> closed = result.contours;
+  filter_islands();
+  const std::vector<Contour> filtered = result.contours;
+
+  const bool opening_changed = filled_area_decreased(opened, contours);
+  const bool closing_changed = filled_area_increased(closed, opened);
+  for (std::size_t i = 0; i < contours.size(); ++i) {
+    const Contour& contour = contours[i];
+    const bool small_island = !contour.hole && options.minimum_island_area > 0.0 &&
+                              std::abs(contour.signed_area) < options.minimum_island_area;
+    if (options.minimum_feature_width > 0.0 && opening_changed)
+      result.warnings.push_back("Contour " + std::to_string(i) +
+                                " contains a feature narrower than the minimum width");
+    if (options.minimum_bridge_width > 0.0 && opening_changed)
+      result.warnings.push_back("Contour " + std::to_string(i) +
+                                " contains a bridge narrower than the minimum width");
+    if (options.minimum_hole_width > 0.0 && contour.hole && closing_changed)
+      result.warnings.push_back("Hole " + std::to_string(i) +
+                                " is narrower than the minimum hole width");
+    if (small_island)
+      result.warnings.push_back("Island " + std::to_string(i) +
+                                " is smaller than the minimum island area");
+  }
+  result.contours = filtered;
+  result.changed = !contours_equal(result.contours, contours);
+  // WARN mode: re-assign original contours so geometry is unmodified,
+  // but warnings still reference indices in the original contours.
+  if (options.mode == CleanupMode::WARN) result.contours = contours;
   return result;
 }
 

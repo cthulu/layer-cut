@@ -25,6 +25,8 @@ struct ConfigHandle {
   int dpi = 300;
   int cleanup_mode = 1;
   layer_cut::ManufacturingCleanupOptions cleanup;
+  slicer_progress_callback_t progress_callback = nullptr;
+  void* progress_context = nullptr;
 };
 struct LayerBytes {
   std::string svg;
@@ -92,6 +94,19 @@ int slicer_config_set_cleanup_mode(slicer_config_t config, int mode) {
   handle<ConfigHandle>(config)->cleanup_mode = mode; return 1;
 }
 
+int slicer_config_set_progress_callback(slicer_config_t config,
+                                        slicer_progress_callback_t callback,
+                                        void* context) {
+  if (!valid_handle(config)) {
+    fail("Config is required");
+    return 0;
+  }
+  auto* config_handle = handle<ConfigHandle>(config);
+  config_handle->progress_callback = callback;
+  config_handle->progress_context = context;
+  return 1;
+}
+
 int slicer_config_set_cleanup_thresholds(slicer_config_t config, double feature_width_mm,
                                          double island_area_mm2, double hole_width_mm,
                                          double bridge_width_mm) {
@@ -116,6 +131,11 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
   auto* config_handle = handle<ConfigHandle>(config);
   const auto sliced = layer_cut::slice_mesh(mesh_handle->mesh, {config_handle->layer_height});
   if (!sliced.valid()) { fail(sliced.errors.front()); return nullptr; }
+  const int total_layers = static_cast<int>(sliced.layers.size());
+  if (config_handle->progress_callback) {
+    config_handle->progress_callback(config_handle->progress_context, 0,
+                                     total_layers, total_layers == 0 ? 1.0 : 0.0);
+  }
   auto* result = new ResultHandle;
   result->layers.resize(sliced.layers.size());
   for (std::size_t i = 0; i < sliced.layers.size(); ++i) {
@@ -144,6 +164,13 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
       if (!png.ok()) { delete result; fail(png.error); return nullptr; }
       result->layers[i].png = png.bytes;
     }
+    if (config_handle->progress_callback) {
+      const int current_layer = static_cast<int>(i + 1);
+      config_handle->progress_callback(
+          config_handle->progress_context, current_layer, total_layers,
+          total_layers == 0 ? 1.0
+                            : static_cast<double>(current_layer) / total_layers);
+    }
   }
   return result;
 }
@@ -157,7 +184,13 @@ const char* slicer_result_layer_svg(slicer_result_t result, int index) {
   if (!valid_handle(result) || index < 0 || static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->layers.size()) {
     fail("SVG layer index is out of range"); return nullptr;
   }
-  return handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].svg.c_str();
+  const auto& svg = handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].svg;
+  return svg.empty() ? nullptr : svg.c_str();
+}
+
+size_t slicer_result_layer_svg_size(slicer_result_t result, int index) {
+  const char* value = slicer_result_layer_svg(result, index);
+  return value == nullptr ? 0 : handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].svg.size();
 }
 
 const uint8_t* slicer_result_layer_png(slicer_result_t result, int index, size_t* size) {
@@ -180,7 +213,13 @@ const char* slicer_result_warning(slicer_result_t result, int index) {
       static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->warnings.size()) {
     fail("Warning index is out of range"); return nullptr;
   }
-  return handle<ResultHandle>(result)->warnings[static_cast<std::size_t>(index)].c_str();
+  const auto& warning = handle<ResultHandle>(result)->warnings[static_cast<std::size_t>(index)];
+  return warning.empty() ? nullptr : warning.c_str();
+}
+
+size_t slicer_result_warning_size(slicer_result_t result, int index) {
+  const char* value = slicer_result_warning(result, index);
+  return value == nullptr ? 0 : handle<ResultHandle>(result)->warnings[static_cast<std::size_t>(index)].size();
 }
 
 const char* slicer_last_error(void) { return last_error.c_str(); }

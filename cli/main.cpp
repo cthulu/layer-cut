@@ -8,8 +8,48 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 #include <string>
+#ifdef _WIN32
+#include <io.h>
+#define LAYER_CUT_ISATTY _isatty
+#define LAYER_CUT_FILENO _fileno
+#else
+#include <unistd.h>
+#define LAYER_CUT_ISATTY isatty
+#define LAYER_CUT_FILENO fileno
+#endif
+
+namespace {
+
+void print_progress(std::size_t current_layer, std::size_t total_layers) {
+  static constexpr char spinner[] = {'|', '/', '-', '\\'};
+  static std::size_t update = 0;
+  const double fraction = total_layers == 0
+                              ? 1.0
+                              : static_cast<double>(current_layer) / total_layers;
+  const int percent = static_cast<int>(std::lround(
+      std::clamp(fraction, 0.0, 1.0) * 100.0));
+  constexpr int bar_width = 24;
+  const int filled = static_cast<int>(std::lround(fraction * bar_width));
+  std::string bar(static_cast<std::size_t>(filled), '#');
+  bar.append(static_cast<std::size_t>(bar_width - filled), '-');
+  const bool interactive = LAYER_CUT_ISATTY(LAYER_CUT_FILENO(stderr)) != 0;
+  if (interactive) {
+    std::cerr << "\r" << spinner[update++ % 4] << " Layer " << current_layer
+              << " of " << total_layers << " [" << bar << "] "
+              << std::setw(3) << percent << "%" << std::flush;
+    if (current_layer >= total_layers) std::cerr << '\n';
+  } else {
+    std::cerr << "Layer " << current_layer << " of " << total_layers << " ["
+              << bar << "] " << std::setw(3) << percent << "%\n";
+  }
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
   CLI::App app{"layer-cut - STL slicer for 2D cutting machines"};
@@ -114,6 +154,7 @@ int main(int argc, char* argv[]) {
   }
 
   std::size_t exported = 0;
+  print_progress(0, sliced.layers.size());
   for (const auto& layer : sliced.layers) {
     const auto cleaned = layer_cut::union_polygons(layer.contours);
     if (!cleaned.ok()) {
@@ -181,6 +222,7 @@ int main(int argc, char* argv[]) {
       }
     }
     ++exported;
+    print_progress(exported, sliced.layers.size());
   }
 
   std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path

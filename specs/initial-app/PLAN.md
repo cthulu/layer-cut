@@ -191,6 +191,13 @@
 #     - Filename: layer_N.png with deterministic zero-padding policy.
 #     - Unit test: Verify pixel dimensions match 300 DPI
 #
+# STEP 08A — PNG generation progress reporting
+#   Goal: Report current layer, total layers, and percentage progress while
+#     generating PNG output without blocking the UI.
+#   Action: Add an optional C ABI callback and worker-thread UI updates.
+#   Acceptance: One monotonic completion update per layer, bounded fractions,
+#     correct empty/one-layer behavior, and no regression in PNG output tests.
+#
 # STEP 9 — C ABI bridge header
 #   Goal: Expose engine functionality via a clean C interface for Swift/FFI.
 #   Action: engine/include/layer_cut.h

@@ -13,6 +13,7 @@ struct PngOptions {
   Vec2 max{0.0, 0.0};
   int dpi = 300;
   bool black_on_white = true;
+  bool antialias = true;
 };
 
 struct PngResult {

@@ -12,6 +12,11 @@ typedef void* slicer_mesh_t;
 typedef void* slicer_result_t;
 typedef void* slicer_config_t;
 
+typedef void (*slicer_progress_callback_t)(void* context,
+                                           int current_layer,
+                                           int total_layers,
+                                           double fraction);
+
 enum slicer_format { SLICER_FORMAT_SVG = 0, SLICER_FORMAT_PNG = 1 };
 
 slicer_mesh_t slicer_load_stl(const char* path);
@@ -22,6 +27,9 @@ int slicer_config_set_canvas(slicer_config_t config, double width_mm,
 int slicer_config_set_format(slicer_config_t config, int format);
 int slicer_config_set_dpi(slicer_config_t config, int dpi);
 int slicer_config_set_cleanup_mode(slicer_config_t config, int mode);
+int slicer_config_set_progress_callback(slicer_config_t config,
+                                        slicer_progress_callback_t callback,
+                                        void* context);
 int slicer_config_set_cleanup_thresholds(slicer_config_t config,
                                          double feature_width_mm,
                                          double island_area_mm2,
@@ -29,11 +37,13 @@ int slicer_config_set_cleanup_thresholds(slicer_config_t config,
                                          double bridge_width_mm);
 slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config);
 int slicer_result_layer_count(slicer_result_t result);
-const char* slicer_result_layer_svg(slicer_result_t result, int index);
 const uint8_t* slicer_result_layer_png(slicer_result_t result, int index,
                                        size_t* size);
+const char* slicer_result_layer_svg(slicer_result_t result, int index);
+size_t slicer_result_layer_svg_size(slicer_result_t result, int index);
 int slicer_result_warning_count(slicer_result_t result);
 const char* slicer_result_warning(slicer_result_t result, int index);
+size_t slicer_result_warning_size(slicer_result_t result, int index);
 const char* slicer_last_error(void);
 void slicer_free_config(slicer_config_t config);
 void slicer_free_mesh(slicer_mesh_t mesh);
