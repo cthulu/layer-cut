@@ -42,11 +42,17 @@ else
   failures=$((failures + 1))
 fi
 
-if [ -n "$developer_dir" ] &&
-   printf '%s' "$developer_dir" | grep -q '/Xcode.app/Contents/Developer'; then
-  report "[ok] full Xcode developer directory selected"
-elif [ -n "$developer_dir" ]; then
-  report "[warn] selected developer directory is not full Xcode"
+if [ -n "$developer_dir" ]; then
+  case "$developer_dir" in
+    */Contents/Developer)
+      report "[ok] full Xcode developer directory selected"
+      ;;
+    *)
+      report "[missing] selected developer directory is not full Xcode"
+      report "         Run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer"
+      failures=$((failures + 1))
+      ;;
+  esac
 fi
 
 if command -v xcrun >/dev/null 2>&1 &&
@@ -79,6 +85,16 @@ fi
 if command -v cmake >/dev/null 2>&1; then
   cmake_version=$(cmake --version | sed -n '1p')
   report "[info] $cmake_version"
+  cmake_version_number=$(printf '%s' "$cmake_version" | sed -n 's/[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+  cmake_major=$(printf '%s' "$cmake_version_number" | cut -d. -f1)
+  cmake_minor=$(printf '%s' "$cmake_version_number" | cut -d. -f2)
+  if [ "$cmake_major" -lt 3 ] ||
+     { [ "$cmake_major" -eq 3 ] && [ "$cmake_minor" -lt 20 ]; }; then
+    report "[missing] CMake 3.20 or newer is required"
+    failures=$((failures + 1))
+  else
+    report "[ok] CMake version is supported"
+  fi
 fi
 
 if [ "$failures" -ne 0 ]; then

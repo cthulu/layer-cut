@@ -78,7 +78,9 @@ feat: add STL binary parser
   handles, thread-local diagnostics, SVG/PNG access, and cleanup APIs.
 - Step 12 includes deterministic fixtures for cubes, negative bounds,
   disconnected components, concavity, holes, and non-divisible heights.
-- Steps 13-20 (macOS SwiftUI application and packaging) remain.
+- macOS app Steps 11 (architecture) and 12 (tooling) are implemented.
+- macOS app Step 13 (Xcode project) is in progress: build script and
+  Swift bridge wrapper are created; Xcode project integration follows.
 
 ## Updating This File
 

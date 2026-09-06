@@ -19,7 +19,7 @@ target_include_directories(layer_cut_engine
 )
 
 target_link_libraries(layer_cut_engine
-  PUBLIC
+  PRIVATE
     layer_cut_warnings
 )
 

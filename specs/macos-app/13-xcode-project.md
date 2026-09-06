@@ -15,11 +15,13 @@ Create a reproducible macOS SwiftUI application target that links the C++ engine
 - Keep the C ABI bridge header pure C and import fixed-width types correctly.
 - Define ownership and `defer` cleanup for every opaque handle.
 - Set an explicit minimum macOS deployment target supported by RealityKit.
-- Decide arm64-only versus universal arm64/x86_64 and test the chosen target.
+- Target arm64 explicitly for the first release and test that architecture.
 - Make CMake produce an Xcode-compatible engine artifact or build the engine as
   an Xcode target; do not rely on a manually copied `.a` file.
 - Add a smoke target that imports SwiftUI and RealityKit and links the ABI.
 
 ## Acceptance
 
-`xcodebuild build` succeeds from a clean checkout after Step 12 passes.
+`tools/build_macos_app.sh` generates the Xcode project and `xcodebuild build`
+succeeds from a clean checkout after Step 12 passes. Generated build and
+derived-data output must remain outside version control.

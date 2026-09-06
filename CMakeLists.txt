@@ -80,6 +80,12 @@ if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
+option(LAYER_CUT_BUILD_MACOS_APP "Build the macOS SwiftUI application" OFF)
+if(LAYER_CUT_BUILD_MACOS_APP)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version for the app")
+  add_subdirectory(macos-app)
+endif()
+
 message(STATUS "layer-cut ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")

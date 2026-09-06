@@ -41,6 +41,14 @@ Load a binary STL, slice it, and export numbered SVG layers:
 ./build/cli/layer-cut testfiles/fox.stl -o output -l 0.2 --format svg
 ```
 
+The same build can be performed with the checked-in helper script. It uses
+`build/cli` by default; set `LAYER_CUT_BUILD_DIR` to override that location:
+
+```bash
+./tools/build_cli.sh
+./build/cli/cli/layer-cut --help
+```
+
 The CLI validates and normalizes the binary STL, slices it at midpoint layer
 positions, cleans contours with Clipper2, and writes files named
 `layer_000.svg`, `layer_001.svg`, and so on. SVG dimensions are in millimetres
@@ -88,3 +96,18 @@ fetched only when explicitly enabled:
 ```bash
 cmake -S . -B build -G Ninja -DLAYER_CUT_FETCH_DEPENDENCIES=ON
 ```
+
+## Build the macOS App
+
+On macOS, verify full Xcode and the required command-line tools, then run the
+checked-in build script:
+
+```bash
+./tools/check_macos_tooling.sh
+./tools/build_macos_app.sh
+```
+
+The script generates `build/macos-xcode/layer-cut.xcodeproj`, selects `arm64`,
+and builds the `LayerCutApp` scheme with `xcodebuild`. Xcode derived data is
+stored in a unique directory below `TMPDIR` (or `/tmp` when `TMPDIR` is unset)
+and removed automatically; no machine-specific temporary path is required.
