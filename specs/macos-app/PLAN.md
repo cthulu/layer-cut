@@ -22,6 +22,7 @@
 9. `17-layer-preview.md`
 10. `19-export-workflow.md`
 11. `20-polish-packaging.md`
+12. `21-ui-composition.md`
 
 The engine transform and mesh snapshot work is intentionally listed between
 project setup and UI implementation because the viewport must not parse STL a
