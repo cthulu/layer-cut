@@ -74,5 +74,8 @@ macos-app/
   previews, independent camera/transform reset, and an active layer plane
   linked to layer preview selection.
 - Profiles are stored under `$XDG_CONFIG_HOME/layer-cut` when configured, or the
-  macOS Application Support fallback. Invalid files recover to the built-in
-  `Default` profile; unknown output options are retained during round trips.
+   macOS Application Support fallback. Invalid files recover to the built-in
+   `Default` profile; unknown output options are retained during round trips.
+- Application settings persist the default profile, output directory, recent
+  STL paths, and appearance in `UserDefaults`. Release packaging is documented
+  in [`../docs/macos-release.md`](../docs/macos-release.md).

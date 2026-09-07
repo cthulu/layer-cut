@@ -191,11 +191,11 @@ final class ProfileController: ObservableObject {
     @Published var errorMessage: String?
     private let store: ProfileStore
 
-    init(store: ProfileStore = ProfileStore()) {
+    init(store: ProfileStore = ProfileStore(), preferredID: UUID? = nil) {
         self.store = store
         let loaded = store.load()
         profiles = loaded
-        selectedID = loaded[0].id
+        selectedID = preferredID.flatMap { id in loaded.contains(where: { $0.id == id }) ? id : nil } ?? loaded[0].id
     }
 
     var activeProfile: SlicingProfile {

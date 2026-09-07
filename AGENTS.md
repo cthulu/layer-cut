@@ -92,6 +92,10 @@ feat: add STL binary parser
 - macOS app Step 17 is implemented: lazy SwiftUI PNG layer previews use copied
    engine bytes, expose layer metadata, warnings, page membership, zoom,
    loading/error states, and drive the RealityKit active-layer highlight.
+- macOS app Step 20 is implemented: shared persisted settings cover default
+  profiles, output directories, recent STL paths, appearance, About/licenses,
+  and reproducible Release packaging with hardened runtime, signing, DMG, and
+  optional notarization documentation.
 
 ## Updating This File
 

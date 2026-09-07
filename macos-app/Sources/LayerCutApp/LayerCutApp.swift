@@ -5,8 +5,11 @@ import RealityKit
 
 @main
 struct LayerCutApp: App {
+    @StateObject private var appSettings = AppSettingsController()
+    @StateObject private var profiles = ProfileController(preferredID: AppSettingsController.load().defaultProfileID)
+
     var body: some SwiftUI.Scene {
-        WindowGroup("Layer Cut") { ContentView().frame(minWidth: 980, minHeight: 640) }
+        WindowGroup("Layer Cut") { ContentView().frame(minWidth: 980, minHeight: 640).environmentObject(appSettings).environmentObject(profiles).preferredColorScheme(appSettings.settings.appearance.colorScheme) }
             .commands {
                 CommandGroup(replacing: .newItem) {
                     Button("Open STL…") {
@@ -16,7 +19,7 @@ struct LayerCutApp: App {
                 }
             }
         #if os(macOS)
-        Settings { SettingsView() }
+        Settings { SettingsView().environmentObject(appSettings).environmentObject(profiles) }
         #endif
     }
 }
@@ -31,7 +34,8 @@ private struct ContentView: View {
         let profile: SlicingProfile
     }
 
-    @StateObject private var profiles = ProfileController()
+    @EnvironmentObject private var appSettings: AppSettingsController
+    @EnvironmentObject private var profiles: ProfileController
     @State private var modelName = "No STL loaded"
     @State private var modelPath: String?
     @State private var outputDirectory = "Default output directory"
@@ -174,8 +178,9 @@ private struct ContentView: View {
     private func openStlPanel() {
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = false; panel.canChooseDirectories = false; panel.canChooseFiles = true
         panel.allowedContentTypes = [UTType(filenameExtension: "stl") ?? .data]
-        if panel.runModal() == .OK, let url = panel.url {
-            modelName = url.lastPathComponent
+         if panel.runModal() == .OK, let url = panel.url {
+             modelName = url.lastPathComponent
+             appSettings.rememberSTL(url)
             modelPath = url.path
             snapshot = nil
             stackedSnapshot = nil
@@ -191,8 +196,9 @@ private struct ContentView: View {
     }
 
     private func beginExport() {
-        let panel = NSOpenPanel(); panel.allowsMultipleSelection = false; panel.canChooseDirectories = true; panel.canChooseFiles = false
-        panel.canCreateDirectories = true
+         let panel = NSOpenPanel(); panel.allowsMultipleSelection = false; panel.canChooseDirectories = true; panel.canChooseFiles = false
+         panel.canCreateDirectories = true
+         if let path = appSettings.settings.defaultOutputDirectory { panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true) }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         outputDirectory = url.path
         outputURL = url
@@ -366,5 +372,46 @@ private struct ContentView: View {
 }
 
 private struct SettingsView: View {
-    var body: some View { Text("Profiles are stored in the platform application-support directory.").foregroundStyle(.secondary).padding().frame(width: 420) }
+    @EnvironmentObject private var appSettings: AppSettingsController
+    @EnvironmentObject private var profiles: ProfileController
+
+    var body: some View {
+        TabView {
+            Form {
+                Section("Profiles") {
+                    Picker("Default profile", selection: Binding(get: { appSettings.settings.defaultProfileID ?? profiles.activeProfile.id }, set: { id in appSettings.settings.defaultProfileID = id; profiles.selectedID = id })) {
+                        ForEach(profiles.profiles) { Text($0.name).tag($0.id) }
+                    }
+                    Text("Profiles are stored as versioned YAML in the application-support directory.").font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Export") {
+                    HStack { Text(appSettings.settings.defaultOutputDirectory ?? "No default directory").lineLimit(1); Spacer(); Button("Choose…", action: chooseOutputDirectory) }
+                    if appSettings.settings.defaultOutputDirectory != nil { Button("Clear default directory", role: .destructive) { appSettings.settings.defaultOutputDirectory = nil } }
+                }
+                Section("Recent STL documents") {
+                    if appSettings.settings.recentSTLPaths.isEmpty { Text("No recent STL documents.").foregroundStyle(.secondary) }
+                    ForEach(appSettings.settings.recentSTLPaths, id: \.self) { path in HStack { Text(URL(fileURLWithPath: path).lastPathComponent); Spacer(); Button("Remove") { appSettings.removeRecentSTL(path) } } }
+                }
+                Section("Appearance") { Picker("Appearance", selection: $appSettings.settings.appearance) { ForEach(AppearancePreference.allCases, id: \.self) { Text($0.label).tag($0) } }.pickerStyle(.segmented) }
+            }.formStyle(.grouped).tabItem { Label("General", systemImage: "gear") }
+            AboutView().tabItem { Label("About", systemImage: "info.circle") }
+        }.padding().frame(width: 560, height: 500)
+    }
+
+    private func chooseOutputDirectory() {
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url { appSettings.settings.defaultOutputDirectory = url.path }
+    }
+}
+
+private struct AboutView: View {
+    private let licenses = "Clipper2: Zlib License\nstb_image_write: Public Domain\nCLI11: BSD 3-Clause License\nApple SwiftUI, RealityKit: Apple system frameworks"
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Layer Cut").font(.title).bold()
+            Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+            Text("Engine version 0 (C++17)").foregroundStyle(.secondary)
+            Divider(); Text("Third-party notices").font(.headline); Text(licenses).font(.caption.monospaced()); Spacer()
+        }.frame(maxWidth: .infinity, alignment: .leading).padding()
+    }
 }

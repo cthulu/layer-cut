@@ -3,6 +3,7 @@ build-sanitize/
 .build/
 macos-app/engine/
 output/
+dist/
 .DS_Store
 __pycache__/
 *.py[cod]

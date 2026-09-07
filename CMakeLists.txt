@@ -83,6 +83,7 @@ endif()
 option(LAYER_CUT_BUILD_MACOS_APP "Build the macOS SwiftUI application" OFF)
 if(LAYER_CUT_BUILD_MACOS_APP)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version for the app")
+  set(LAYER_CUT_VERSION "${PROJECT_VERSION}")
   add_subdirectory(macos-app)
 endif()
 
