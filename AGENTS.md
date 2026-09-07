@@ -79,8 +79,19 @@ feat: add STL binary parser
 - Step 12 includes deterministic fixtures for cubes, negative bounds,
   disconnected components, concavity, holes, and non-divisible heights.
 - macOS app Steps 11 (architecture) and 12 (tooling) are implemented.
-- macOS app Step 13 (Xcode project) is in progress: build script and
-  Swift bridge wrapper are created; Xcode project integration follows.
+- macOS app Steps 13 and 15 are implemented: the generated Xcode app includes
+  the Swift bridge, profile-driven parameters UI, versioned YAML persistence,
+  atomic writes, recovery, and focused profile tests.
+- macOS app Step 16 is implemented: typed detached Swift engine services use
+   transform-aware snapshots, copied export data, diagnostics, progress,
+   cancellation, and explicit opaque-handle lifetime management.
+- macOS app Step 18 is implemented: the RealityKit viewport converts engine
+   mesh snapshots in millimetre world coordinates, supports orbit/pan/zoom,
+   profile-synchronized axis/rotation/scale preview, active layer planes and
+   selection, and independent camera/transform reset.
+- macOS app Step 17 is implemented: lazy SwiftUI PNG layer previews use copied
+   engine bytes, expose layer metadata, warnings, page membership, zoom,
+   loading/error states, and drive the RealityKit active-layer highlight.
 
 ## Updating This File
 

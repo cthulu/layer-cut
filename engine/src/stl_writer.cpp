@@ -1,8 +1,10 @@
 #include "stl_writer.h"
 
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace layer_cut {
@@ -85,6 +87,44 @@ std::string make_ascii_stl(const std::vector<Triangle>& triangles,
   output << "endsolid " << (solid_name.empty() ? "layer_cut" : solid_name)
          << '\n';
   return output.str();
+}
+
+std::string make_binary_stl(const std::vector<Triangle>& triangles,
+                            const std::string& solid_name,
+                            std::string* error) {
+  if (error) error->clear();
+  if (triangles.empty()) {
+    if (error) *error = "Cannot write an empty STL mesh";
+    return {};
+  }
+  if (triangles.size() > std::numeric_limits<uint32_t>::max()) {
+    if (error) *error = "Too many triangles for binary STL";
+    return {};
+  }
+
+  std::string output(84 + triangles.size() * 50, '\0');
+  const std::string header = "layer-cut binary STL " + solid_name;
+  std::memcpy(output.data(), header.data(), std::min(header.size(), size_t{80}));
+  const uint32_t count = static_cast<uint32_t>(triangles.size());
+  std::memcpy(output.data() + 80, &count, sizeof(count));
+  for (std::size_t i = 0; i < triangles.size(); ++i) {
+    const Triangle& triangle = triangles[i];
+    if (!valid_triangle(triangle)) {
+      if (error) *error = "Triangle " + std::to_string(i) + " contains a non-finite coordinate";
+      return {};
+    }
+    Vec3 normal;
+    if (!normal_for(triangle, &normal)) {
+      if (error) *error = "Triangle " + std::to_string(i) + " is degenerate";
+      return {};
+    }
+    char* record = output.data() + 84 + i * 50;
+    std::memcpy(record, &normal, sizeof(normal));
+    std::memcpy(record + 12, &triangle.a, sizeof(Vec3));
+    std::memcpy(record + 24, &triangle.b, sizeof(Vec3));
+    std::memcpy(record + 36, &triangle.c, sizeof(Vec3));
+  }
+  return output;
 }
 
 bool write_ascii_stl_file(const std::string& path,

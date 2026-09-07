@@ -6,180 +6,365 @@ import RealityKit
 @main
 struct LayerCutApp: App {
     var body: some SwiftUI.Scene {
-        WindowGroup("Layer Cut") {
-            ContentView()
-                .frame(minWidth: 980, minHeight: 640)
-        }
-
+        WindowGroup("Layer Cut") { ContentView().frame(minWidth: 980, minHeight: 640) }
+            .commands {
+                CommandGroup(replacing: .newItem) {
+                    Button("Open STL…") {
+                        NotificationCenter.default.post(name: .layerCutOpenSTL, object: nil)
+                    }
+                    .keyboardShortcut("o", modifiers: .command)
+                }
+            }
         #if os(macOS)
-        Settings {
-            SettingsView()
-        }
+        Settings { SettingsView() }
         #endif
     }
 }
 
-private struct ContentView: View {
-    @State private var modelName = "No STL loaded"
-    @State private var outputDirectory = "Default output directory"
-    @State private var profileName = "Default"
-    @State private var layerHeight = 1.0
-    @State private var scale = 1.0
-    @State private var selectedAxis = "+Z"
-    @State private var rotation = 0.0
-    @State private var status = "Ready for an STL model"
+private extension Notification.Name {
+    static let layerCutOpenSTL = Notification.Name("LayerCut.openSTL")
+}
 
-    private let axes = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+private struct ContentView: View {
+    private struct PreviewIdentity: Equatable {
+        let path: String
+        let profile: SlicingProfile
+    }
+
+    @StateObject private var profiles = ProfileController()
+    @State private var modelName = "No STL loaded"
+    @State private var modelPath: String?
+    @State private var outputDirectory = "Default output directory"
+    @State private var outputURL: URL?
+    @State private var status = "Ready for an STL model"
+    @State private var normalizedHeight = 0.0
+    @State private var exportProgress = 0.0
+    @State private var exportReport: ExportReport?
+    @State private var exportError: String?
+    @State private var pendingOverwritePaths: [String]?
+    @State private var exportTask: Task<Void, Never>?
+    @State private var layerOutput: SliceOutput?
+    @State private var previewTask: Task<Void, Never>?
+    @State private var layersExpanded = false
+    @State private var layerOutputIdentity: PreviewIdentity?
+    @State private var previewGeneration = UUID()
+    @State private var previewZoom = 1.0
+    @State private var previewError: String?
+    @State private var previewProgress = 0.0
+    @State private var isLayerPreviewPresented = false
+    @State private var snapshot: MeshSnapshot?
+    @State private var stackedSnapshot: MeshSnapshot?
+    @State private var isGeneratingStackedPreview = false
+    @State private var stackedPreviewProgress = 0.0
+    @State private var stackedPreviewError: String?
+    @State private var livePreview = true
+    @State private var stackedPreviewTask: Task<Void, Never>?
+    @State private var stackedPreviewGeneration = UUID()
+    @State private var stackedPreviewIdentity: PreviewIdentity?
+    @State private var activeLayer = 0
+    @State private var resetCameraID = 0
+    @State private var viewportError: String?
+
+    private let meshService = MeshService()
 
     var body: some View {
         NavigationSplitView {
-            Form {
-                Section("Profile") {
-                    HStack {
-                        Picker("Active profile", selection: $profileName) {
-                            Text("Default").tag("Default")
-                        }
-                        Button {
-                            status = "Profile creation will be connected to YAML storage"
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Create profile")
-                    }
+            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status)
+                .safeAreaInset(edge: .bottom) {
+                    if let error = profiles.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(8) }
                 }
-
-                Section("Model") {
-                    Button("Open STL…") { openStlPanel() }
-                    Text(modelName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                Section("Orientation") {
-                    Picker("Up axis", selection: $selectedAxis) {
-                        ForEach(axes, id: \.self) { Text($0) }
-                    }
-                    Slider(value: Binding(
-                        get: { rotation },
-                        set: { rotation = $0.rounded() }
-                    ), in: -180...180) {
-                        Text("Rotation")
-                    } minimumValueLabel: {
-                        Text("-180°")
-                    } maximumValueLabel: {
-                        Text("180°")
-                    }
-                    LabeledContent("Rotation", value: "\(Int(rotation))°")
-                    Slider(value: Binding(
-                        get: { scale },
-                        set: { scale = (round($0 * 100) / 100).clamped(to: 0.1...2.0) }
-                    ), in: 0.1...2.0) {
-                        Text("Scale")
-                    }
-                    LabeledContent("Scale", value: String(format: "%.2fx", scale))
-                }
-
-                Section("Slicing") {
-                    Slider(value: Binding(
-                        get: { layerHeight },
-                        set: { layerHeight = (round($0 * 10) / 10).clamped(to: 0.1...5.0) }
-                    ), in: 0.1...5.0) {
-                        Text("Layer height")
-                    }
-                    LabeledContent("Layer height", value: String(format: "%.1f mm", layerHeight))
-                }
-
-                Section("Output") {
-                    Button("Choose Output Folder…") { openOutputFolderPanel() }
-                    Text(outputDirectory)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    Button("Preview Configuration") {
-                        status = "Preview will use the active profile and transformed model"
-                    }
-                    Button("Export") {
-                        status = "Engine export integration is the next implementation step"
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-            .formStyle(.grouped)
-            .padding()
-            .frame(minWidth: 360, idealWidth: 390, maxWidth: 440)
-            .navigationTitle("Layer Cut")
-            .navigationSplitViewColumnWidth(min: 360, ideal: 390, max: 440)
+                .navigationTitle("Layer Cut")
+                .navigationSplitViewColumnWidth(min: 360, ideal: 390, max: 440)
         } detail: {
             VStack(spacing: 0) {
-                ViewportView()
+                 HSplitView {
+                 VStack(spacing: 0) {
+                     Text("Original STL model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                    ViewportView(snapshot: snapshot,
+                             activeLayer: activeLayer,
+                             layerHeight: profiles.activeProfile.layerHeight,
+                             activeLayerZ: layerOutput?.layers.first(where: { $0.index == activeLayer })?.z,
+                             resetCameraID: resetCameraID,
+                             onLayerChange: { activeLayer = $0 })
                     .overlay(alignment: .topLeading) {
-                        Text("Right-drag to orbit")
-                            .font(.caption)
-                            .padding(8)
-                            .background(.thinMaterial, in: Capsule())
-                            .padding()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Right-drag orbit  •  Middle-drag pan  •  Scroll zoom")
+                            HStack {
+                                Button { resetCameraID += 1 } label: { Label("Reset camera", systemImage: "camera.rotate") }
+                                Button {
+                                    var profile = profiles.activeProfile
+                                    profile.axis = "+Z"
+                                    profile.rotation = 0
+                                    profile.scale = 1
+                                    profiles.activeProfile = profile
+                                } label: { Label("Reset transform", systemImage: "arrow.uturn.backward") }
+                            }
+                            if let snapshot {
+                                let count = max(1, Int(ceil(Double(snapshot.bounds.max.z - snapshot.bounds.min.z) / profiles.activeProfile.layerHeight)))
+                                Stepper("Layer \(min(activeLayer + 1, count)) / \(count)", value: $activeLayer, in: 0...(count - 1))
+                            }
+                            if let viewportError { Text(viewportError).foregroundStyle(.red) }
+                        }
+                        .font(.caption)
+                        .padding(10)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .padding()
                     }
-                Divider()
-                Text(status)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
-            }
-             .frame(maxWidth: .infinity, maxHeight: .infinity)
-             .background(.windowBackground)
+                     .frame(minWidth: 360, minHeight: 240)
+                 }
+                 VStack(spacing: 0) {
+                     Text("Stacked layer model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                     if let stackedSnapshot {
+                        ViewportView(snapshot: stackedSnapshot,
+                                     activeLayer: activeLayer,
+                                     layerHeight: profiles.activeProfile.layerHeight,
+                                     activeLayerZ: nil,
+                                      resetCameraID: resetCameraID,
+                                      onLayerChange: { _ in })
+                     } else if isGeneratingStackedPreview {
+                         ProgressView("Generating stacked preview…")
+                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                     } else {
+                         ContentUnavailableView("Stacked preview unavailable", systemImage: "cube.transparent", description: Text(stackedPreviewError ?? "The active profile did not produce a stacked STL."))
+                     }
+                 }
+                 .frame(minWidth: 360, minHeight: 240)
+                 }
+                 }
+                Text("\(modelName)  |  \(status)").font(.callout).foregroundStyle(.secondary).padding(12)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.windowBackground)
+         .task(id: snapshotTaskKey) { await refreshSnapshots() }
+          .onChange(of: profiles.activeProfile) { _, _ in
+             layerOutput = nil
+             layerOutputIdentity = nil
+             previewError = nil
+              cancelPreview()
+               cancelPreview()
+              cancelStackedPreview()
+              if livePreview { startStackedPreview() }
+          }
+          .onChange(of: livePreview) { _, enabled in
+              if enabled { startStackedPreview() } else { cancelStackedPreview() }
+          }
+         .onReceive(NotificationCenter.default.publisher(for: .layerCutOpenSTL)) { _ in
+             openStlPanel()
          }
-     }
+         .sheet(isPresented: $isLayerPreviewPresented, onDismiss: cancelPreview) {
+             LayerPreviewSheet(output: layerOutput, task: previewTask != nil, progress: previewProgress,
+                               error: previewError, selection: Binding(get: { activeLayer }, set: { activeLayer = $0 ?? 0 }),
+                               zoom: $previewZoom, onCancel: { isLayerPreviewPresented = false })
+                 .frame(minWidth: 620, minHeight: 460)
+         }
+        .alert("Overwrite existing files?", isPresented: Binding(get: { pendingOverwritePaths != nil }, set: { if !$0 { pendingOverwritePaths = nil } })) {
+            Button { pendingOverwritePaths = nil } label: { Label("Cancel", systemImage: "xmark") }
+            Button(role: .destructive) {
+                pendingOverwritePaths = nil
+                startExport(allowOverwrite: true)
+            } label: { Label("Overwrite", systemImage: "arrow.uturn.right") }
+        } message: {
+            Text("The export contains existing files: \((pendingOverwritePaths ?? []).joined(separator: ", "))")
+        }
+        .alert("Export Error", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button { exportError = nil } label: { Label("OK", systemImage: "checkmark") }.keyboardShortcut(.defaultAction)
+        } message: {
+            Text(exportError ?? "Unknown export error")
+        }
+    }
 
-     private func openStlPanel() {
-         let panel = NSOpenPanel()
-         panel.allowsMultipleSelection = false
-         panel.canChooseDirectories = false
-         panel.canChooseFiles = true
-         panel.allowedContentTypes = [UTType(filenameExtension: "stl") ?? .data]
+    private func openStlPanel() {
+        let panel = NSOpenPanel(); panel.allowsMultipleSelection = false; panel.canChooseDirectories = false; panel.canChooseFiles = true
+        panel.allowedContentTypes = [UTType(filenameExtension: "stl") ?? .data]
+        if panel.runModal() == .OK, let url = panel.url {
+            modelName = url.lastPathComponent
+            modelPath = url.path
+            snapshot = nil
+            stackedSnapshot = nil
+            stackedPreviewError = nil
+            cancelStackedPreview()
+            if livePreview { startStackedPreview() }
+            activeLayer = 0
+            layerOutput = nil
+            layerOutputIdentity = nil
+            cancelPreview()
+            status = "Loading model snapshot…"
+        }
+    }
 
-         switch panel.runModal() {
-         case .OK:
-             let url = panel.url ?? URL(fileURLWithPath: NSHomeDirectory())
-             modelName = url.lastPathComponent
-             status = "Loaded \(modelName); engine metadata is not connected yet"
-         default:
-             break
-          }
-      }
+    private func beginExport() {
+        let panel = NSOpenPanel(); panel.allowsMultipleSelection = false; panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        outputDirectory = url.path
+        outputURL = url
+        status = "Output directory selected"
+        startExport(allowOverwrite: false)
+    }
 
-     private func openOutputFolderPanel() {
-         let panel = NSOpenPanel()
-         panel.allowsMultipleSelection = false
-         panel.canChooseDirectories = true
-         panel.canChooseFiles = false
+    private func presentLayerPreview() {
+        isLayerPreviewPresented = true
+        guard modelPath != nil else { previewError = "Open an STL model first."; return }
+        startPreview()
+    }
 
-         switch panel.runModal() {
-         case .OK:
-             if let url = panel.url {
-                outputDirectory = url.path
-                status = "Output directory selected"
-             }
-         default:
-             break
-          }
-      }
- }
+    private func startPreview() {
+        guard let modelPath else { return }
+        let profile = profiles.activeProfile
+        let identity = PreviewIdentity(path: modelPath, profile: profile)
+        guard layerOutputIdentity != identity else { return }
+        previewTask?.cancel()
+        let generation = UUID()
+        previewGeneration = generation
+        previewError = nil
+        previewProgress = 0
+        previewTask = Task {
+            do {
+                let value = try await SlicingService().preview(path: modelPath, profile: profile, dpi: 96,
+                    progress: { value in Task { @MainActor in
+                        guard generation == previewGeneration else { return }
+                        previewProgress = value
+                    } })
+                await MainActor.run {
+                    guard generation == previewGeneration,
+                          self.modelPath == modelPath, profiles.activeProfile == profile else { return }
+                    layerOutput = value
+                    layerOutputIdentity = identity
+                    activeLayer = min(activeLayer, max(0, value.layers.count - 1))
+                    previewTask = nil
+                    status = "Preview ready"
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    if generation == previewGeneration { previewTask = nil }
+                }
+            } catch {
+                await MainActor.run {
+                    guard generation == previewGeneration else { return }
+                    previewError = error.localizedDescription
+                    previewTask = nil
+                    status = "Preview failed"
+                }
+            }
+        }
+    }
 
-private extension BinaryFloatingPoint {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    private func cancelPreview() {
+        previewGeneration = UUID()
+        previewTask?.cancel()
+        previewTask = nil
+    }
+
+    private func startStackedPreview() {
+        guard let modelPath else { return }
+        let profile = profiles.activeProfile
+        let identity = PreviewIdentity(path: modelPath, profile: profile)
+        guard stackedPreviewIdentity != identity || stackedPreviewTask == nil else { return }
+        stackedPreviewTask?.cancel()
+        let generation = UUID()
+        stackedPreviewGeneration = generation
+        stackedPreviewIdentity = identity
+        isGeneratingStackedPreview = true
+        stackedPreviewProgress = 0
+        stackedPreviewError = nil
+        stackedPreviewTask = Task {
+            do {
+                let value = try await meshService.stackedSnapshot(path: modelPath, profile: profile,
+                    progress: { value in Task { @MainActor in
+                        guard generation == stackedPreviewGeneration else { return }
+                        stackedPreviewProgress = value
+                    } })
+                await MainActor.run {
+                    guard generation == stackedPreviewGeneration, self.modelPath == modelPath, profiles.activeProfile == profile else { return }
+                    stackedSnapshot = value
+                    isGeneratingStackedPreview = false
+                    stackedPreviewTask = nil
+                    status = "Ready"
+                }
+            } catch is CancellationError {
+                await MainActor.run { if generation == stackedPreviewGeneration { isGeneratingStackedPreview = false; stackedPreviewTask = nil } }
+            } catch {
+                await MainActor.run {
+                    guard generation == stackedPreviewGeneration else { return }
+                    stackedSnapshot = nil
+                    stackedPreviewError = error.localizedDescription
+                    isGeneratingStackedPreview = false
+                    stackedPreviewTask = nil
+                    status = "Stacked preview failed"
+                }
+            }
+        }
+    }
+
+    private func cancelStackedPreview() {
+        stackedPreviewGeneration = UUID()
+        stackedPreviewTask?.cancel()
+        stackedPreviewTask = nil
+        isGeneratingStackedPreview = false
+        stackedPreviewProgress = 0
+        stackedPreviewIdentity = nil
+    }
+
+    private var snapshotTaskKey: String {
+        guard let modelPath else { return "none" }
+        let profile = profiles.activeProfile
+        return "\(modelPath)|\(profile.axis)|\(profile.rotation)|\(profile.scale)"
+    }
+
+    @MainActor
+    private func refreshSnapshots() async {
+        guard let modelPath else { return }
+        let profile = profiles.activeProfile
+        do {
+            async let metadata = meshService.load(path: modelPath)
+            async let transformed = meshService.snapshot(path: modelPath, axis: profile.axis, rotation: profile.rotation, scale: profile.scale)
+             let (meshMetadata, value) = try await (metadata, transformed)
+             normalizedHeight = Double(meshMetadata.bounds.max.z - meshMetadata.bounds.min.z)
+             snapshot = value
+            activeLayer = 0
+            status = "Ready"
+            viewportError = nil
+        } catch is CancellationError {
+            // A profile transform changed while the previous snapshot was loading.
+        } catch {
+            viewportError = error.localizedDescription
+            stackedSnapshot = nil
+            stackedPreviewError = error.localizedDescription
+            status = "Unable to load model"
+        }
+    }
+
+    private func startExport(allowOverwrite: Bool) {
+        guard let modelPath, let outputURL else { exportError = "Choose an STL and output directory first."; return }
+        let profile = profiles.activeProfile
+        exportProgress = 0
+        exportReport = nil
+        status = "Exporting…"
+        exportTask = Task {
+            do {
+                let report = try await ExportCoordinator().run(path: modelPath, profile: profile,
+                    directory: SecurityScopedDirectory(url: outputURL), allowOverwrite: allowOverwrite,
+                    progress: { value in Task { @MainActor in exportProgress = value } })
+                await MainActor.run {
+                    exportReport = report
+                    status = report.completion == .completed ? "Export complete" : "Export completed with failures"
+                    exportTask = nil
+                }
+            } catch let error as ExportError {
+                await MainActor.run {
+                    if case .overwriteConfirmationRequired(let paths) = error { pendingOverwritePaths = paths }
+                    else { exportError = error.localizedDescription }
+                    status = {
+                        if case .cancelled = error { return "Export cancelled" }
+                        return "Export not completed"
+                    }()
+                    exportTask = nil
+                }
+            } catch {
+                await MainActor.run { exportError = error.localizedDescription; status = "Export not completed"; exportTask = nil }
+            }
+        }
     }
 }
 
 private struct SettingsView: View {
-    var body: some View {
-        Form {
-            Text("YAML profile storage will be connected in the profile implementation step.")
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .frame(width: 420)
-    }
+    var body: some View { Text("Profiles are stored in the platform application-support directory.").foregroundStyle(.secondary).padding().frame(width: 420) }
 }

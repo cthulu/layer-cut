@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
                  "Output directory for generated layers (default: output)");
   app.add_option("-l,--layer-height", layer_height,
                  "Layer height in millimetres (default: 0.2)")
-      ->check(CLI::Range(0.01, 1.0));
+      ->check(CLI::Range(0.01, 6.0));
   app.add_option("-f,--format", format,
                  "Output format: svg, png, cricut-normal, or cricut-large")
       ->check(CLI::IsMember({"svg", "png", "cricut-normal", "cricut-large"}));

@@ -10,7 +10,12 @@ endif()
 add_executable(LayerCutApp
   Sources/LayerCutApp/LayerCutApp.swift
   Sources/LayerCutApp/EngineBridge.swift
+  Sources/LayerCutApp/EngineServices.swift
+  Sources/LayerCutApp/ExportWorkflow.swift
   Sources/LayerCutApp/ViewportView.swift
+  Sources/LayerCutApp/Profile.swift
+  Sources/LayerCutApp/ParametersPanel.swift
+  Sources/LayerCutApp/LayerPreview.swift
 )
 
 target_link_libraries(LayerCutApp
@@ -27,6 +32,7 @@ target_link_libraries(LayerCutApp
   PRIVATE
     "-framework SwiftUI"
     "-framework RealityKit"
+    "-framework WebKit"
 )
 
 # Set macOS deployment target (RealityKit requires macOS 14+).
@@ -42,6 +48,38 @@ set_target_properties(LayerCutApp PROPERTIES
   CODE_SIGNING_REQUIRED OFF
   CODE_SIGNING_ALLOWED OFF
 )
+
+if(BUILD_TESTING)
+  add_executable(LayerCutProfileTests
+    Sources/LayerCutApp/Profile.swift
+    Tests/ProfileTests.swift
+  )
+  target_link_libraries(LayerCutProfileTests PRIVATE
+    "-framework SwiftUI"
+  )
+  set_target_properties(LayerCutProfileTests PROPERTIES
+    XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "14.0"
+    XCODE_ATTRIBUTE_SWIFT_VERSION "5.9"
+  )
+  add_test(NAME layer_cut_profile_tests COMMAND LayerCutProfileTests)
+
+  add_executable(LayerCutExportWorkflowTests
+    Sources/LayerCutApp/EngineBridge.swift
+    Sources/LayerCutApp/EngineServices.swift
+    Sources/LayerCutApp/Profile.swift
+    Sources/LayerCutApp/ExportWorkflow.swift
+    Tests/ExportWorkflowTests.swift
+  )
+  target_link_libraries(LayerCutExportWorkflowTests PRIVATE
+    layer_cut_engine
+    "-framework SwiftUI"
+  )
+  set_target_properties(LayerCutExportWorkflowTests PROPERTIES
+    XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "14.0"
+    XCODE_ATTRIBUTE_SWIFT_VERSION "5.9"
+  )
+  add_test(NAME layer_cut_export_workflow_tests COMMAND LayerCutExportWorkflowTests)
+endif()
 
 set_target_properties(LayerCutApp PROPERTIES
   XCODE_ATTRIBUTE_SWIFT_VERSION "5.9"

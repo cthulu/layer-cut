@@ -32,11 +32,28 @@ func layer_cut_config_set_cleanup_mode(_ config: UnsafeMutableRawPointer, _ mode
 @_silgen_name("slicer_config_set_cleanup_thresholds")
 func layer_cut_config_set_cleanup_thresholds(_ config: UnsafeMutableRawPointer, _ featureWidth: CDouble, _ islandArea: CDouble, _ holeWidth: CDouble, _ bridgeWidth: CDouble) -> Int32
 
+typealias LayerCutProgressCallback = @convention(c) (UnsafeMutableRawPointer?, Int32, Int32, CDouble) -> Void
+
+@_silgen_name("slicer_config_set_transform")
+func layer_cut_config_set_transform(_ config: UnsafeMutableRawPointer, _ axis: Int32, _ rotation: CDouble, _ scale: CDouble) -> Int32
+
+@_silgen_name("slicer_config_set_cancellation")
+func layer_cut_config_set_cancellation(_ config: UnsafeMutableRawPointer, _ cancellation: UnsafeMutableRawPointer?) -> Int32
+
+@_silgen_name("slicer_config_set_progress_callback")
+func layer_cut_config_set_progress_callback(_ config: UnsafeMutableRawPointer, _ callback: LayerCutProgressCallback?, _ context: UnsafeMutableRawPointer?) -> Int32
+
 @_silgen_name("slicer_slice")
 func layer_cut_slice(_ mesh: UnsafeMutableRawPointer, _ config: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer?
 
 @_silgen_name("slicer_result_layer_count")
 func layer_cut_result_layer_count(_ result: UnsafeMutableRawPointer) -> Int32
+
+@_silgen_name("slicer_result_layer_z")
+func layer_cut_result_layer_z(_ result: UnsafeMutableRawPointer, _ index: Int32) -> CDouble
+
+@_silgen_name("slicer_result_layer_is_empty")
+func layer_cut_result_layer_is_empty(_ result: UnsafeMutableRawPointer, _ index: Int32) -> Int32
 
 @_silgen_name("slicer_result_page_count")
 func layer_cut_result_page_count(_ result: UnsafeMutableRawPointer) -> Int32
@@ -56,6 +73,9 @@ func layer_cut_result_page_cut_svg(_ result: UnsafeMutableRawPointer, _ page: In
 @_silgen_name("slicer_result_page_guide_svg")
 func layer_cut_result_page_guide_svg(_ result: UnsafeMutableRawPointer, _ page: Int32) -> UnsafePointer<CChar>?
 
+@_silgen_name("slicer_result_page_combined_svg")
+func layer_cut_result_page_combined_svg(_ result: UnsafeMutableRawPointer, _ page: Int32) -> UnsafePointer<CChar>?
+
 @_silgen_name("slicer_result_page_layer_start")
 func layer_cut_result_page_layer_start(_ result: UnsafeMutableRawPointer, _ page: Int32) -> Int32
 
@@ -67,6 +87,69 @@ func layer_cut_result_page_path_count(_ result: UnsafeMutableRawPointer, _ page:
 
 @_silgen_name("slicer_result_warning")
 func layer_cut_result_warning(_ result: UnsafeMutableRawPointer, _ index: Int32) -> UnsafePointer<CChar>?
+
+@_silgen_name("slicer_result_stacked_stl")
+func layer_cut_result_stacked_stl(_ result: UnsafeMutableRawPointer, _ size: UnsafeMutablePointer<Int>) -> UnsafePointer<UInt8>?
+
+@_silgen_name("slicer_result_diagnostic_count")
+func layer_cut_result_diagnostic_count(_ result: UnsafeMutableRawPointer) -> Int32
+
+@_silgen_name("slicer_result_diagnostic")
+func layer_cut_result_diagnostic(_ result: UnsafeMutableRawPointer, _ index: Int32) -> UnsafePointer<CChar>?
+
+@_silgen_name("slicer_result_diagnostic_severity")
+func layer_cut_result_diagnostic_severity(_ result: UnsafeMutableRawPointer, _ index: Int32) -> Int32
+
+@_silgen_name("slicer_mesh_triangle_count")
+func layer_cut_mesh_triangle_count(_ mesh: UnsafeMutableRawPointer) -> Int32
+
+@_silgen_name("slicer_mesh_bounds")
+func layer_cut_mesh_bounds(_ mesh: UnsafeMutableRawPointer, _ bounds: UnsafeMutablePointer<LayerCutBounds>) -> Int32
+
+@_silgen_name("slicer_mesh_volume")
+func layer_cut_mesh_volume(_ mesh: UnsafeMutableRawPointer) -> CDouble
+
+@_silgen_name("slicer_mesh_diagnostic_count")
+func layer_cut_mesh_diagnostic_count(_ mesh: UnsafeMutableRawPointer) -> Int32
+
+@_silgen_name("slicer_mesh_diagnostic")
+func layer_cut_mesh_diagnostic(_ mesh: UnsafeMutableRawPointer, _ index: Int32) -> UnsafePointer<CChar>?
+
+@_silgen_name("slicer_mesh_diagnostic_severity")
+func layer_cut_mesh_diagnostic_severity(_ mesh: UnsafeMutableRawPointer, _ index: Int32) -> Int32
+
+@_silgen_name("slicer_mesh_snapshot")
+func layer_cut_mesh_snapshot(_ mesh: UnsafeMutableRawPointer, _ axis: Int32, _ rotation: CDouble, _ scale: CDouble, _ snapshot: UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Int32
+
+@_silgen_name("slicer_snapshot_vertices")
+func layer_cut_snapshot_vertices(_ snapshot: UnsafeMutableRawPointer, _ count: UnsafeMutablePointer<Int>) -> UnsafePointer<Float>?
+
+@_silgen_name("slicer_snapshot_indices")
+func layer_cut_snapshot_indices(_ snapshot: UnsafeMutableRawPointer, _ count: UnsafeMutablePointer<Int>) -> UnsafePointer<UInt32>?
+
+struct LayerCutBounds {
+    var min_x: Float
+    var min_y: Float
+    var min_z: Float
+    var max_x: Float
+    var max_y: Float
+    var max_z: Float
+}
+
+@_silgen_name("slicer_snapshot_bounds")
+func layer_cut_snapshot_bounds(_ snapshot: UnsafeMutableRawPointer, _ bounds: UnsafeMutablePointer<LayerCutBounds>) -> Int32
+
+@_silgen_name("slicer_cancellation_create")
+func layer_cut_cancellation_create() -> UnsafeMutableRawPointer?
+
+@_silgen_name("slicer_cancellation_cancel")
+func layer_cut_cancellation_cancel(_ cancellation: UnsafeMutableRawPointer?)
+
+@_silgen_name("slicer_free_cancellation")
+func layer_cut_free_cancellation(_ cancellation: UnsafeMutableRawPointer?)
+
+@_silgen_name("slicer_free_snapshot")
+func layer_cut_free_snapshot(_ snapshot: UnsafeMutableRawPointer?)
 
 @_silgen_name("slicer_last_error")
 func layer_cut_last_error() -> UnsafePointer<CChar>?
@@ -82,12 +165,20 @@ func layer_cut_free_result(_ result: UnsafeMutableRawPointer?)
 
 // MARK: - Swift Bridge
 
-enum EngineError: Error {
+enum EngineError: LocalizedError {
     case loadFailed(String)
     case sliceFailed(String)
     case invalidIndex(String)
     case noData(String)
     case lastError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .loadFailed(let message), .sliceFailed(let message),
+             .invalidIndex(let message), .noData(let message), .lastError(let message):
+            return message
+        }
+    }
 }
 
 final class MeshHandle {
@@ -227,6 +318,14 @@ func slice(mesh: MeshHandle, config: ConfigHandle) throws -> SliceResultHandle {
 
 func resultLayerCount(_ result: SliceResultHandle) -> Int32 {
     layer_cut_result_layer_count(result.raw)
+}
+
+func resultLayerZ(_ result: SliceResultHandle, index: Int32) -> Double {
+    Double(layer_cut_result_layer_z(result.raw, index))
+}
+
+func resultLayerIsEmpty(_ result: SliceResultHandle, index: Int32) -> Bool {
+    layer_cut_result_layer_is_empty(result.raw, index) != 0
 }
 
 func resultPageCount(_ result: SliceResultHandle) -> Int32 {

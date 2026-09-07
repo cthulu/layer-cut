@@ -22,10 +22,21 @@ int main(void) {
   int status = 0;
   slicer_mesh_t mesh = slicer_load_stl(LAYER_CUT_SOURCE_DIR "/testfiles/fox.stl");
   if (!mesh) return 1;
+  slicer_snapshot_t snapshot = NULL;
+  size_t snapshot_vertices = 0;
+  if (!slicer_mesh_snapshot(mesh, 4, 0.0, 1.0, &snapshot) || !snapshot ||
+      !slicer_snapshot_vertices(snapshot, &snapshot_vertices) ||
+      snapshot_vertices == 0) {
+    status = 1;
+  }
+  slicer_free_snapshot(snapshot);
   slicer_config_t config = slicer_config_create();
   if (!config || !slicer_config_set_layer_height(config, 0.2)) { status = 2; goto cleanup_mesh; }
   if (!slicer_config_set_cleanup_mode(config, 1) ||
       !slicer_config_set_cleanup_thresholds(config, 1.0, 0.0, 0.0, 0.0)) {
+    status = 2; goto cleanup_config;
+  }
+  if (!slicer_config_set_transform(config, 4, 0.0, 1.0)) {
     status = 2; goto cleanup_config;
   }
   progress_state_t progress = {0, -1, 0, -1.0};
@@ -64,10 +75,24 @@ int main(void) {
       slicer_result_page_guide_svg_size(pages, 0) == 0 ||
       slicer_result_page_cut_svg(pages, -1) != NULL ||
       slicer_last_error()[0] == '\0') {
-    status = 7;
+      status = 7;
   }
+  size_t stacked_size = 0;
+  if (!slicer_result_stacked_stl(pages, &stacked_size) || stacked_size == 0 ||
+      !slicer_result_page_combined_svg(pages, 0)) status = 7;
   slicer_free_result(pages);
   slicer_free_config(page_config);
+  slicer_cancellation_t cancellation = slicer_cancellation_create();
+  slicer_config_t cancelled_config = slicer_config_create();
+  if (!cancellation || !cancelled_config ||
+      !slicer_config_set_cancellation(cancelled_config, cancellation)) {
+    status = 8;
+  } else {
+    slicer_cancellation_cancel(cancellation);
+    if (slicer_slice(mesh, cancelled_config) != NULL) status = 8;
+  }
+  slicer_free_config(cancelled_config);
+  slicer_free_cancellation(cancellation);
 cleanup_config:
   slicer_free_config(config);
 cleanup_mesh:

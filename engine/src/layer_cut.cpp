@@ -6,9 +6,13 @@
 #include "cricut_page.h"
 #include "slicer.h"
 #include "stl_loader.h"
+#include "stacked_preview.h"
+#include "stl_writer.h"
 #include "svg_writer.h"
 
 #include <cmath>
+#include <atomic>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -17,7 +21,10 @@
 namespace {
 thread_local std::string last_error;
 
-struct MeshHandle { layer_cut::Mesh mesh; };
+struct MeshHandle {
+  layer_cut::Mesh mesh;
+  std::vector<layer_cut::MeshDiagnostic> diagnostics;
+};
 struct ConfigHandle {
   double layer_height = 0.2;
   double canvas_width = 0.0;
@@ -30,14 +37,21 @@ struct ConfigHandle {
   layer_cut::ManufacturingCleanupOptions cleanup;
   slicer_progress_callback_t progress_callback = nullptr;
   void* progress_context = nullptr;
+  int axis = 4;
+  double rotation_degrees = 0.0;
+  double scale = 1.0;
+  std::shared_ptr<std::atomic<bool>> cancellation;
 };
 struct LayerBytes {
   std::string svg;
   std::vector<uint8_t> png;
+  double z = 0.0;
+  bool empty = true;
 };
 struct PageBytes {
   std::string cut_svg;
   std::string guide_svg;
+  std::string combined_svg;
   int layer_start = 0;
   int layer_count = 0;
   int path_count = 0;
@@ -46,11 +60,77 @@ struct ResultHandle {
   std::vector<LayerBytes> layers;
   std::vector<PageBytes> pages;
   std::vector<std::string> warnings;
+  std::vector<std::string> diagnostics;
+  std::vector<int> diagnostic_severity;
+  std::string stacked_stl;
+};
+struct SnapshotHandle {
+  std::vector<float> vertices;
+  std::vector<uint32_t> indices;
+  slicer_bounds_t bounds{};
+};
+struct CancellationHandle {
+  std::shared_ptr<std::atomic<bool>> value =
+      std::make_shared<std::atomic<bool>>(false);
 };
 
 template <typename T> T* handle(void* value) { return static_cast<T*>(value); }
 void fail(std::string message) { last_error = std::move(message); }
 bool valid_handle(const void* value) { return value != nullptr; }
+
+layer_cut::Mesh transformed(const layer_cut::Mesh& source, int axis,
+                            double rotation_degrees, double scale) {
+  layer_cut::Mesh output;
+  const double radians = rotation_degrees * 3.14159265358979323846 / 180.0;
+  const double cosine = std::cos(radians), sine = std::sin(radians);
+  auto orient = [axis](const layer_cut::Vec3& p) {
+    switch (axis) {
+      case 0: return layer_cut::Vec3{p.z, p.y, -p.x};
+      case 1: return layer_cut::Vec3{-p.z, p.y, p.x};
+      case 2: return layer_cut::Vec3{p.x, p.z, -p.y};
+      case 3: return layer_cut::Vec3{p.x, -p.z, p.y};
+      case 5: return layer_cut::Vec3{p.x, -p.y, -p.z};
+      default: return p;
+    }
+  };
+  auto apply = [&](const layer_cut::Vec3& value) {
+    const auto p = orient(value);
+    return layer_cut::Vec3{
+        static_cast<float>((p.x * cosine - p.y * sine) * scale),
+        static_cast<float>((p.x * sine + p.y * cosine) * scale),
+        static_cast<float>(p.z * scale)};
+  };
+  bool first = true;
+  for (const auto& triangle : source.triangles) {
+    const layer_cut::Triangle copy{triangle.normal, apply(triangle.a),
+                                   apply(triangle.b), apply(triangle.c)};
+    output.triangles.push_back(copy);
+    for (const auto& point : {copy.a, copy.b, copy.c}) {
+      if (first) { output.min = output.max = point; first = false; }
+      else {
+        output.min.x = std::min(output.min.x, point.x);
+        output.min.y = std::min(output.min.y, point.y);
+        output.min.z = std::min(output.min.z, point.z);
+        output.max.x = std::max(output.max.x, point.x);
+        output.max.y = std::max(output.max.y, point.y);
+        output.max.z = std::max(output.max.z, point.z);
+      }
+    }
+  }
+  if (!first) {
+    const float offset = output.min.z;
+    for (auto& triangle : output.triangles) {
+      for (auto* point : {&triangle.a, &triangle.b, &triangle.c}) point->z -= offset;
+    }
+    output.min.z = 0.0f;
+    output.max.z -= offset;
+  }
+  return output;
+}
+
+bool cancelled(const ConfigHandle& config) {
+  return config.cancellation && config.cancellation->load();
+}
 }
 
 extern "C" {
@@ -65,6 +145,7 @@ slicer_mesh_t slicer_load_stl(const char* path) {
   if (validation.has_errors()) { fail("STL mesh validation failed"); return nullptr; }
   auto* result = new MeshHandle;
   result->mesh = validation.mesh;
+  result->diagnostics = validation.diagnostics;
   return result;
 }
 
@@ -139,6 +220,29 @@ int slicer_config_set_progress_callback(slicer_config_t config,
   return 1;
 }
 
+int slicer_config_set_transform(slicer_config_t config, int axis,
+                                double rotation_degrees, double scale) {
+  if (!valid_handle(config) || axis < 0 || axis > 5 ||
+      !std::isfinite(rotation_degrees) || rotation_degrees < -180.0 ||
+      rotation_degrees > 180.0 || !std::isfinite(scale) || scale <= 0.0) {
+    fail("Transform values are invalid");
+    return 0;
+  }
+  auto* value = handle<ConfigHandle>(config);
+  value->axis = axis;
+  value->rotation_degrees = rotation_degrees;
+  value->scale = scale;
+  return 1;
+}
+
+int slicer_config_set_cancellation(slicer_config_t config,
+                                   slicer_cancellation_t cancellation) {
+  if (!valid_handle(config)) { fail("Config is required"); return 0; }
+  handle<ConfigHandle>(config)->cancellation = cancellation
+      ? handle<CancellationHandle>(cancellation)->value : nullptr;
+  return 1;
+}
+
 int slicer_config_set_cleanup_thresholds(slicer_config_t config, double feature_width_mm,
                                          double island_area_mm2, double hole_width_mm,
                                          double bridge_width_mm) {
@@ -161,7 +265,11 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
   if (!valid_handle(mesh) || !valid_handle(config)) { fail("Mesh and config are required"); return nullptr; }
   auto* mesh_handle = handle<MeshHandle>(mesh);
   auto* config_handle = handle<ConfigHandle>(config);
-  const auto sliced = layer_cut::slice_mesh(mesh_handle->mesh, {config_handle->layer_height});
+  if (cancelled(*config_handle)) { fail("Slicing cancelled"); return nullptr; }
+  const auto prepared_mesh = transformed(mesh_handle->mesh, config_handle->axis,
+                                         config_handle->rotation_degrees,
+                                         config_handle->scale);
+  const auto sliced = layer_cut::slice_mesh(prepared_mesh, {config_handle->layer_height});
   if (!sliced.valid()) { fail(sliced.errors.front()); return nullptr; }
   const int total_layers = static_cast<int>(sliced.layers.size());
   if (config_handle->progress_callback) {
@@ -169,6 +277,11 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
                                      total_layers, total_layers == 0 ? 1.0 : 0.0);
   }
   auto* result = new ResultHandle;
+  for (const auto& diagnostic : mesh_handle->diagnostics) {
+    result->diagnostics.push_back(diagnostic.message);
+    result->diagnostic_severity.push_back(
+        diagnostic.severity == layer_cut::DiagnosticSeverity::ERROR ? 1 : 0);
+  }
 
   if (config_handle->format == SLICER_FORMAT_CRICUT_NORMAL ||
       config_handle->format == SLICER_FORMAT_CRICUT_LARGE) {
@@ -180,6 +293,7 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
     std::vector<layer_cut::SliceLayer> prepared_layers;
     prepared_layers.reserve(sliced.layers.size());
     for (const auto& layer : sliced.layers) {
+      if (cancelled(*config_handle)) { delete result; fail("Slicing cancelled"); return nullptr; }
       const auto unioned = layer_cut::union_polygons(layer.contours);
       if (!unioned.ok()) {
         delete result;
@@ -211,12 +325,24 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
       fail(pages.error);
       return nullptr;
     }
+    result->layers.resize(prepared_layers.size());
+    for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
+      const auto& layer = prepared_layers[i];
+      result->layers[i].z = layer.z;
+      result->layers[i].empty = layer.contours.empty();
+      result->layers[i].svg = layer_cut::make_svg(
+          layer.contours,
+          {{layer.min.x, layer.min.y}, {layer.max.x, layer.max.y},
+           layer.index, layer.z});
+    }
     result->pages.reserve(pages.pages.size());
     for (const auto& page : pages.pages) {
       PageBytes bytes;
       bytes.cut_svg = layer_cut::make_cricut_cut_svg(page);
       std::vector<std::string> guide_warnings;
       bytes.guide_svg = layer_cut::make_cricut_guide_svg(
+          page, config_handle->cricut_guide_inset, &guide_warnings);
+      bytes.combined_svg = layer_cut::make_cricut_combined_svg(
           page, config_handle->cricut_guide_inset, &guide_warnings);
       result->warnings.insert(result->warnings.end(), guide_warnings.begin(),
                               guide_warnings.end());
@@ -229,13 +355,18 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
       config_handle->progress_callback(config_handle->progress_context,
                                        total_layers, total_layers, 1.0);
     }
+    const auto stacked = layer_cut::make_stacked_preview(prepared_layers,
+                                                         config_handle->layer_height);
+    if (stacked.ok()) result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
     return result;
 #endif
   }
 
   result->layers.resize(sliced.layers.size());
   for (std::size_t i = 0; i < sliced.layers.size(); ++i) {
+    if (cancelled(*config_handle)) { delete result; fail("Slicing cancelled"); return nullptr; }
     const auto& layer = sliced.layers[i];
+    result->layers[i].z = layer.z;
     layer_cut::Vec2 min = {layer.min.x, layer.min.y};
     layer_cut::Vec2 max = {layer.max.x, layer.max.y};
     if (config_handle->canvas_width > 0.0) {
@@ -252,7 +383,10 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
     contours = cleanup.contours;
     result->warnings.insert(result->warnings.end(), cleanup.warnings.begin(), cleanup.warnings.end());
 #endif
-    if (config_handle->format == SLICER_FORMAT_SVG) {
+    result->layers[i].empty = contours.empty();
+    // Keep vector layer data available for the macOS preview. PNG is an export
+    // format; Cricut formats still produce SVG page data and need SVG layers.
+    if (config_handle->format != SLICER_FORMAT_PNG) {
       result->layers[i].svg = layer_cut::make_svg(contours,
           {min, max, layer.index, layer.z});
     } else {
@@ -268,12 +402,33 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
                             : static_cast<double>(current_layer) / total_layers);
     }
   }
+  const auto stacked = layer_cut::make_stacked_preview(sliced.layers,
+                                                       config_handle->layer_height);
+  if (stacked.ok()) result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
   return result;
 }
 
 int slicer_result_layer_count(slicer_result_t result) {
   if (!valid_handle(result)) { fail("Result is null"); return 0; }
   return static_cast<int>(handle<ResultHandle>(result)->layers.size());
+}
+
+double slicer_result_layer_z(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->layers.size()) {
+    fail("Layer index is out of range");
+    return 0.0;
+  }
+  return handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].z;
+}
+
+int slicer_result_layer_is_empty(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->layers.size()) {
+    fail("Layer index is out of range");
+    return 1;
+  }
+  return handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].empty ? 1 : 0;
 }
 
 const char* slicer_result_layer_svg(slicer_result_t result, int index) {
@@ -326,6 +481,16 @@ size_t slicer_result_page_guide_svg_size(slicer_result_t result, int page) {
   return value == nullptr ? 0 : value->guide_svg.size();
 }
 
+const char* slicer_result_page_combined_svg(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? nullptr : value->combined_svg.c_str();
+}
+
+size_t slicer_result_page_combined_svg_size(slicer_result_t result, int page) {
+  PageBytes* value = page_at(result, page);
+  return value == nullptr ? 0 : value->combined_svg.size();
+}
+
 int slicer_result_page_layer_start(slicer_result_t result, int page) {
   PageBytes* value = page_at(result, page);
   return value == nullptr ? -1 : value->layer_start;
@@ -370,9 +535,130 @@ size_t slicer_result_warning_size(slicer_result_t result, int index) {
   return value == nullptr ? 0 : handle<ResultHandle>(result)->warnings[static_cast<std::size_t>(index)].size();
 }
 
+const uint8_t* slicer_result_stacked_stl(slicer_result_t result, size_t* size) {
+  if (size) *size = 0;
+  if (!valid_handle(result)) { fail("Result is null"); return nullptr; }
+  const auto& value = handle<ResultHandle>(result)->stacked_stl;
+  if (size) *size = value.size();
+  return value.empty() ? nullptr : reinterpret_cast<const uint8_t*>(value.data());
+}
+
+int slicer_result_diagnostic_count(slicer_result_t result) {
+  return valid_handle(result) ? static_cast<int>(handle<ResultHandle>(result)->diagnostics.size()) : 0;
+}
+
+const char* slicer_result_diagnostic(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->diagnostics.size()) {
+    fail("Diagnostic index is out of range"); return nullptr;
+  }
+  return handle<ResultHandle>(result)->diagnostics[static_cast<std::size_t>(index)].c_str();
+}
+
+int slicer_result_diagnostic_severity(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->diagnostic_severity.size()) {
+    fail("Diagnostic index is out of range"); return -1;
+  }
+  return handle<ResultHandle>(result)->diagnostic_severity[static_cast<std::size_t>(index)];
+}
+
+int slicer_mesh_triangle_count(slicer_mesh_t mesh) {
+  return valid_handle(mesh) ? static_cast<int>(handle<MeshHandle>(mesh)->mesh.triangles.size()) : 0;
+}
+
+int slicer_mesh_bounds(slicer_mesh_t mesh, slicer_bounds_t* bounds) {
+  if (!valid_handle(mesh) || !bounds) { fail("Mesh bounds request is invalid"); return 0; }
+  const auto& value = handle<MeshHandle>(mesh)->mesh;
+  *bounds = {value.min.x, value.min.y, value.min.z, value.max.x, value.max.y, value.max.z};
+  return 1;
+}
+
+double slicer_mesh_volume(slicer_mesh_t mesh) {
+  if (!valid_handle(mesh)) { fail("Mesh is null"); return 0.0; }
+  return handle<MeshHandle>(mesh)->mesh.compute_volume();
+}
+
+int slicer_mesh_diagnostic_count(slicer_mesh_t mesh) {
+  return valid_handle(mesh) ? static_cast<int>(handle<MeshHandle>(mesh)->diagnostics.size()) : 0;
+}
+
+const char* slicer_mesh_diagnostic(slicer_mesh_t mesh, int index) {
+  if (!valid_handle(mesh) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<MeshHandle>(mesh)->diagnostics.size()) {
+    fail("Mesh diagnostic index is out of range"); return nullptr;
+  }
+  return handle<MeshHandle>(mesh)->diagnostics[static_cast<std::size_t>(index)].message.c_str();
+}
+
+int slicer_mesh_diagnostic_severity(slicer_mesh_t mesh, int index) {
+  if (!valid_handle(mesh) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<MeshHandle>(mesh)->diagnostics.size()) {
+    fail("Mesh diagnostic index is out of range"); return -1;
+  }
+  return handle<MeshHandle>(mesh)->diagnostics[static_cast<std::size_t>(index)].severity ==
+             layer_cut::DiagnosticSeverity::ERROR ? 1 : 0;
+}
+
+int slicer_mesh_snapshot(slicer_mesh_t mesh, int axis, double rotation_degrees,
+                         double scale, slicer_snapshot_t* snapshot) {
+  if (snapshot) *snapshot = nullptr;
+  if (!valid_handle(mesh) || !snapshot || axis < 0 || axis > 5 ||
+      !std::isfinite(rotation_degrees) || !std::isfinite(scale) || scale <= 0.0) {
+    fail("Invalid mesh snapshot request"); return 0;
+  }
+  const auto value = transformed(handle<MeshHandle>(mesh)->mesh, axis,
+                                 rotation_degrees, scale);
+  auto* output = new SnapshotHandle;
+  output->vertices.reserve(value.triangles.size() * 9);
+  output->indices.reserve(value.triangles.size() * 3);
+  for (const auto& triangle : value.triangles) {
+    for (const auto& point : {triangle.a, triangle.b, triangle.c}) {
+      output->indices.push_back(static_cast<uint32_t>(output->vertices.size() / 3));
+      output->vertices.insert(output->vertices.end(), {point.x, point.y, point.z});
+    }
+  }
+  output->bounds = {value.min.x, value.min.y, value.min.z,
+                    value.max.x, value.max.y, value.max.z};
+  *snapshot = output;
+  return 1;
+}
+
+const float* slicer_snapshot_vertices(slicer_snapshot_t snapshot, size_t* count) {
+  if (count) *count = 0;
+  if (!valid_handle(snapshot)) return nullptr;
+  const auto& values = handle<SnapshotHandle>(snapshot)->vertices;
+  if (count) *count = values.size();
+  return values.empty() ? nullptr : values.data();
+}
+
+const uint32_t* slicer_snapshot_indices(slicer_snapshot_t snapshot, size_t* count) {
+  if (count) *count = 0;
+  if (!valid_handle(snapshot)) return nullptr;
+  const auto& values = handle<SnapshotHandle>(snapshot)->indices;
+  if (count) *count = values.size();
+  return values.empty() ? nullptr : values.data();
+}
+
+int slicer_snapshot_bounds(slicer_snapshot_t snapshot, slicer_bounds_t* bounds) {
+  if (!valid_handle(snapshot) || !bounds) { fail("Snapshot bounds request is invalid"); return 0; }
+  *bounds = handle<SnapshotHandle>(snapshot)->bounds;
+  return 1;
+}
+
+slicer_cancellation_t slicer_cancellation_create(void) { return new CancellationHandle; }
+void slicer_cancellation_cancel(slicer_cancellation_t cancellation) {
+  if (valid_handle(cancellation)) handle<CancellationHandle>(cancellation)->value->store(true);
+}
+int slicer_cancellation_is_cancelled(slicer_cancellation_t cancellation) {
+  return valid_handle(cancellation) && handle<CancellationHandle>(cancellation)->value->load();
+}
+
 const char* slicer_last_error(void) { return last_error.c_str(); }
 void slicer_free_config(slicer_config_t config) { delete handle<ConfigHandle>(config); }
 void slicer_free_mesh(slicer_mesh_t mesh) { delete handle<MeshHandle>(mesh); }
 void slicer_free_result(slicer_result_t result) { delete handle<ResultHandle>(result); }
+void slicer_free_snapshot(slicer_snapshot_t snapshot) { delete handle<SnapshotHandle>(snapshot); }
+void slicer_free_cancellation(slicer_cancellation_t cancellation) { delete handle<CancellationHandle>(cancellation); }
 
 }  // extern "C"

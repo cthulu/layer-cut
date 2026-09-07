@@ -14,7 +14,7 @@
 1. `11-architecture.md`
 2. `12-tooling.md`
 3. `13-xcode-project.md`
-4. Engine transform and mesh-snapshot C ABI prerequisites.
+4. if needed: Engine transform and mesh-snapshot C ABI prerequisites.
 5. `14-file-import-ui.md`
 6. `15-parameters-panel.md`
 7. `16-engine-integration.md`
