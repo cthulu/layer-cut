@@ -22,6 +22,15 @@ layer_cut::SliceLayer large_layer(std::size_t index, double z) {
   return value;
 }
 
+layer_cut::SliceLayer rectangle_layer(std::size_t index, double z, double size) {
+  layer_cut::SliceLayer value;
+  value.index = index;
+  value.z = z;
+  value.contours.push_back({{{0, 0}, {size, 0}, {size, size}, {0, size}}, false,
+                            size * size});
+  return value;
+}
+
 }  // namespace
 
 int main() {
@@ -59,6 +68,22 @@ int main() {
       combined.find("data-operation=\"cut\"") == std::string::npos ||
       combined.find("data-operation=\"draw\"") == std::string::npos) {
     return 4;
+  }
+
+  const auto outside_result = layer_cut::build_cricut_pages(
+      {rectangle_layer(0, 0.5, 8.0), rectangle_layer(1, 1.5, 10.0)}, options);
+  if (!outside_result.ok()) return 10;
+  std::vector<std::string> outside_warnings;
+  const auto outside_guide = layer_cut::make_cricut_guide_svg(
+      outside_result.pages.front(), 1.0, &outside_warnings);
+  const auto outside_combined = layer_cut::make_cricut_combined_svg(
+      outside_result.pages.front(), 1.0, &outside_warnings);
+  if (outside_warnings.empty() ||
+      outside_guide.find("id=\"pen-guide-001-over-000\"") == std::string::npos ||
+      outside_guide.find("M 7.000000000 7.000000000") == std::string::npos ||
+      outside_combined.find("id=\"pen-guide-001-over-000\"") == std::string::npos ||
+      outside_combined.find("M 7.000000000 7.000000000") == std::string::npos) {
+    return 11;
   }
 
   options.gap_mm = 3.0;

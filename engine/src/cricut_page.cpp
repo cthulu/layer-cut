@@ -231,23 +231,23 @@ std::string make_cricut_guide_svg(const CricutPage& page, double inset_mm,
     std::vector<Contour> guide_contours = next.contours;
 #ifdef LAYER_CUT_HAVE_CLIPPER
     if (!std::isfinite(inset_mm) || inset_mm <= 0.0) {
-      if (warnings) warnings->push_back("Guide inset must be positive; guide omitted");
-      continue;
-    }
-    const auto offset = offset_polygons(next.contours, -inset_mm);
-    const auto outside = offset.ok()
-                             ? difference_polygons(offset.contours, previous.contours)
-                             : PolygonOperationResult{};
-    if (!offset.ok() || !outside.ok() || !outside.contours.empty() ||
-        offset.contours.empty()) {
-      if (warnings) {
-        warnings->push_back("Guide omitted for layer " +
-                            std::to_string(next.layer_index) +
-                            ": inset is invalid or not contained by previous layer");
+      if (warnings) warnings->push_back("Guide inset must be positive; using outline");
+    } else {
+      const auto offset = offset_polygons(next.contours, -inset_mm);
+      const auto outside = offset.ok()
+                               ? difference_polygons(offset.contours, previous.contours)
+                               : PolygonOperationResult{};
+      if (!offset.ok() || !outside.ok() || !outside.contours.empty() ||
+          offset.contours.empty()) {
+        if (warnings) {
+          warnings->push_back("Guide inset invalid or not contained for layer " +
+                              std::to_string(next.layer_index) +
+                              "; using outline");
+        }
+      } else {
+        guide_contours = offset.contours;
       }
-      continue;
     }
-    guide_contours = offset.contours;
 #else
     if (warnings) warnings->push_back("Guide inset unavailable without Clipper2");
 #endif
@@ -283,23 +283,23 @@ std::string make_cricut_combined_svg(const CricutPage& page, double inset_mm,
     std::vector<Contour> guide_contours = next.contours;
 #ifdef LAYER_CUT_HAVE_CLIPPER
     if (!std::isfinite(inset_mm) || inset_mm <= 0.0) {
-      if (warnings) warnings->push_back("Guide inset must be positive; guide omitted");
-      continue;
-    }
-    const auto offset = offset_polygons(next.contours, -inset_mm);
-    const auto outside = offset.ok()
-                             ? difference_polygons(offset.contours, previous.contours)
-                             : PolygonOperationResult{};
-    if (!offset.ok() || !outside.ok() || !outside.contours.empty() ||
-        offset.contours.empty()) {
-      if (warnings) {
-        warnings->push_back("Guide omitted for layer " +
-                            std::to_string(next.layer_index) +
-                            ": inset is invalid or not contained by previous layer");
+      if (warnings) warnings->push_back("Guide inset must be positive; using outline");
+    } else {
+      const auto offset = offset_polygons(next.contours, -inset_mm);
+      const auto outside = offset.ok()
+                               ? difference_polygons(offset.contours, previous.contours)
+                               : PolygonOperationResult{};
+      if (!offset.ok() || !outside.ok() || !outside.contours.empty() ||
+          offset.contours.empty()) {
+        if (warnings) {
+          warnings->push_back("Guide inset invalid or not contained for layer " +
+                              std::to_string(next.layer_index) +
+                              "; using outline");
+        }
+      } else {
+        guide_contours = offset.contours;
       }
-      continue;
     }
-    guide_contours = offset.contours;
 #else
     if (warnings) warnings->push_back("Guide inset unavailable without Clipper2");
 #endif
