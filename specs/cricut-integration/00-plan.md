@@ -19,7 +19,9 @@ independent.
 - Add `cricut-large` for a 304 x 608 mm page.
 - Reserve 7 mm on every side; usable areas are 290 x 290 mm and 290 x 594 mm.
 - Generate multiple pages when all layers do not fit on one page.
-- Use fixed row-major packing first; do not rotate layers.
+- Use fixed row-major packing first; fixed packing never rotates layers.
+- Tight packing may use deterministic orthogonal layer rotations (`0`, `90`,
+  `180`, `270` degrees).
 - Default the inter-tile gap to 3 mm and allow negative gaps with warnings.
 - Reject an oversized layer instead of scaling or splitting it.
 - Enforce a conservative 4,500-path limit per SVG page.
@@ -30,7 +32,9 @@ independent.
 - Use one guide file per page, with one independently selectable guide group per interface.
 - Use true inward offsets in millimetres for production guides.
 - Omit guides that cannot be contained by the previous layer and emit warnings.
-- Keep `tight-packing` as a future strategy.
+- Keep `tight-packing` as a future strategy until its implementation spec is
+  complete.
+- Keep layer numbering disabled by default and limited to combined Cricut SVGs.
 - Add an optional accurate, watertight stacked STL preview.
 - Do not attempt automated Design Space validation; validation is manual only.
 
@@ -57,7 +61,10 @@ independent.
 11. Stacked STL CLI integration and tests.
 12. Stacked STL tests.
 13. C ABI page access.
-14. Tight packing.
+14. Tight packing and orthogonal rotation.
+15. Design Space validation record.
+16. Guide outline invariant.
+17. Combined SVG layer numbering.
 
 `15-design-space-validation.md` is a cross-cutting validation record and should
 be completed immediately after the sample spike, before production assumptions

@@ -40,7 +40,8 @@ The implementation may use a platform-appropriate split orientation, but the two
 pane titles and roles must remain clear. Each pane has independent camera reset
 behavior where practical; transform/profile changes invalidate and refresh both
 representations together. If no stacked preview exists, the second pane shows a
-specific empty/loading/error state rather than a blank viewport. Generating the
+specific empty/loading/error state inside the full assigned pane rather than
+removing or collapsing the viewport. Generating the
 stacked preview is controlled by the live-preview toggle and may be started on
 demand from the sidebar.
 
@@ -56,6 +57,10 @@ Both 3D panes use the RealityKit viewport contract from `18-3d-viewport.md`:
   as a 2D icon or a misleading solid placeholder.
 - Orbit, pan, scroll zoom, axis presets, fine rotation, scale preview, and
   independent camera/transform reset remain available.
+- The reset-camera help is collapsed into a compact control by default and can be
+  expanded on demand.
+- The active slicing plane includes a light-gray 5 mm grid for orientation; this
+  is viewport-only and is never export geometry.
 - The active layer is represented by a horizontal slice plane in the original
   pane. Selecting a layer in the layer preview updates that plane and the
   highlighted layer state.
