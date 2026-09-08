@@ -61,7 +61,6 @@ private struct ContentView: View {
     @State private var isGeneratingStackedPreview = false
     @State private var stackedPreviewProgress = 0.0
     @State private var stackedPreviewError: String?
-    @State private var livePreview = true
     @State private var stackedPreviewTask: Task<Void, Never>?
     @State private var stackedPreviewGeneration = UUID()
     @State private var stackedPreviewIdentity: PreviewIdentity?
@@ -73,7 +72,7 @@ private struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status)
+            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status)
                 .safeAreaInset(edge: .bottom) {
                     if let error = profiles.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(8) }
                 }
@@ -145,9 +144,9 @@ private struct ContentView: View {
               cancelPreview()
                cancelPreview()
               cancelStackedPreview()
-              if livePreview { startStackedPreview() }
+               if appSettings.settings.livePreview { startStackedPreview() }
           }
-          .onChange(of: livePreview) { _, enabled in
+          .onChange(of: appSettings.settings.livePreview) { _, enabled in
               if enabled { startStackedPreview() } else { cancelStackedPreview() }
           }
          .onReceive(NotificationCenter.default.publisher(for: .layerCutOpenSTL)) { _ in
@@ -186,7 +185,7 @@ private struct ContentView: View {
             stackedSnapshot = nil
             stackedPreviewError = nil
             cancelStackedPreview()
-            if livePreview { startStackedPreview() }
+            if appSettings.settings.livePreview { startStackedPreview() }
             activeLayer = 0
             layerOutput = nil
             layerOutputIdentity = nil

@@ -53,27 +53,12 @@ struct ParametersPanel: View {
                 }
             }
             DisclosureGroup("Model Orientation", isExpanded: $orientationExpanded) {
-                Picker("Axis preset", selection: profileBinding(\.axis)) { ForEach(axes, id: \.self, content: Text.init) }
-                HStack {
-                    Text("Fine rotation (°)")
-                    Slider(value: profileBinding(\.rotation), in: -180...180, step: 1)
-                    TextField("", value: profileBinding(\.rotation), format: .number.locale(Locale(identifier: "en_US")))
-                        .frame(width: 80)
-                }
-                HStack {
-                    Text("Scale (x)")
-                    Slider(value: profileBinding(\.scale), in: 0.1...10, step: 0.01)
-                    TextField("", value: profileBinding(\.scale), format: .number.locale(Locale(identifier: "en_US")))
-                        .frame(width: 80)
-                }
+                Picker("Rotation axis", selection: profileBinding(\.axis)) { ForEach(axes, id: \.self, content: Text.init) }
+                sliderRow("Fine rotation (°)", value: profileBinding(\.rotation), range: -180...180)
+                sliderRow("Scale", value: profileBinding(\.scale), range: 0.1...10)
             }
             DisclosureGroup("Slicing", isExpanded: $slicingExpanded) {
-                HStack {
-                    Text("Layer height (mm)")
-                    Slider(value: profileBinding(\.layerHeight), in: 0.1...10, step: 0.1)
-                    TextField("", value: profileBinding(\.layerHeight), format: .number.locale(Locale(identifier: "en_US")))
-                        .frame(width: 100)
-                }
+                sliderRow("Layer height (mm)", value: profileBinding(\.layerHeight), range: 0.1...10)
                 LabeledContent("Estimated layers", value: normalizedHeight > 0 ? "\(Int(ceil(normalizedHeight / profileController.activeProfile.layerHeight)))" : "Load a model")
             }
             DisclosureGroup("Cleanup", isExpanded: $cleanupExpanded) {
@@ -107,8 +92,8 @@ struct ParametersPanel: View {
             }
             DisclosureGroup("Cricut", isExpanded: $cricutExpanded) {
                 Picker("Packing", selection: profileBinding(\.packing)) { Text("Fixed").tag("fixed"); Text("Tight").tag("tight") }
-                TextField("Gap (mm)", value: profileBinding(\.cricutGap), format: .number.locale(Locale(identifier: "en_US")))
-                TextField("Guide inset (mm)", value: profileBinding(\.guideInset), format: .number.locale(Locale(identifier: "en_US")))
+                TextField("Gap (mm)", value: profileBinding(\.cricutGap), format: numberFormat)
+                TextField("Guide inset (mm)", value: profileBinding(\.guideInset), format: numberFormat)
                 LabeledContent("Page estimate", value: profileController.activeProfile.outputFormat.contains("cricut") ? "Calculated on preview" : "Not applicable")
             }
         }
@@ -120,5 +105,21 @@ struct ParametersPanel: View {
     private var selectedFormat: String { ["cricut-normal", "cricut-large", "cricut-combined"].contains(profileController.activeProfile.outputFormat) ? "stacked-svg" : profileController.activeProfile.outputFormat }
     private var cricutSizeBinding: Binding<String> { Binding(get: { profileController.activeProfile.outputFormat == "cricut-large" ? "cricut-large" : "cricut-normal" }, set: { value in var profile = profileController.activeProfile; profile.outputFormat = value; profile.combinedCricut = true; profileController.activeProfile = profile }) }
     private func profileBinding(_ keyPath: WritableKeyPath<SlicingProfile, Double?>, default defaultValue: Double) -> Binding<Double> { Binding(get: { profileController.activeProfile[keyPath: keyPath] ?? defaultValue }, set: { var profile = profileController.activeProfile; profile[keyPath: keyPath] = $0 > 0 ? $0 : nil; profileController.activeProfile = profile }) }
-    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View { TextField(title, value: profileBinding(keyPath), format: .number.locale(Locale(identifier: "en_US"))) }
+    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View { TextField(title, value: profileBinding(keyPath), format: numberFormat) }
+    private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack { Text(title); Spacer(); TextField("", value: value, format: numberFormat).frame(width: 100) }
+            HStack(spacing: 0) {
+                Slider(value: value, in: range)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .layoutPriority(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 0)
+        .fixedSize(horizontal: false, vertical: true)
+        .gridCellColumns(2)
+    }
+    private var numberFormat: FloatingPointFormatStyle<Double> { .number.locale(Locale(identifier: "C")).precision(.fractionLength(0...2)) }
 }

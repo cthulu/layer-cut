@@ -12,7 +12,27 @@ struct AppSettings: Codable, Equatable {
     var defaultOutputDirectory: String?
     var recentSTLPaths: [String]
     var appearance: AppearancePreference
-    static let `default` = AppSettings(defaultProfileID: nil, defaultOutputDirectory: nil, recentSTLPaths: [], appearance: .system)
+    var livePreview: Bool
+    static let `default` = AppSettings(defaultProfileID: nil, defaultOutputDirectory: nil, recentSTLPaths: [], appearance: .system, livePreview: true)
+
+    private enum CodingKeys: String, CodingKey { case defaultProfileID, defaultOutputDirectory, recentSTLPaths, appearance, livePreview }
+
+    init(defaultProfileID: UUID?, defaultOutputDirectory: String?, recentSTLPaths: [String], appearance: AppearancePreference, livePreview: Bool = true) {
+        self.defaultProfileID = defaultProfileID
+        self.defaultOutputDirectory = defaultOutputDirectory
+        self.recentSTLPaths = recentSTLPaths
+        self.appearance = appearance
+        self.livePreview = livePreview
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        defaultProfileID = try values.decodeIfPresent(UUID.self, forKey: .defaultProfileID)
+        defaultOutputDirectory = try values.decodeIfPresent(String.self, forKey: .defaultOutputDirectory)
+        recentSTLPaths = try values.decode([String].self, forKey: .recentSTLPaths)
+        appearance = try values.decode(AppearancePreference.self, forKey: .appearance)
+        livePreview = try values.decodeIfPresent(Bool.self, forKey: .livePreview) ?? true
+    }
 }
 
 final class AppSettingsController: ObservableObject {
