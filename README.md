@@ -113,6 +113,8 @@ Swift app communicates with the engine through the plain C ABI in
 
 - [`BUILDING.md`](BUILDING.md) contains platform-specific build details and
   CLI behavior.
+- [`docs/macos-release.md`](docs/macos-release.md) documents macOS release
+  packaging and the location of the generated DMG.
 - [`macos-app/README.md`](macos-app/README.md) documents the app architecture
   and development notes.
 - [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) lists dependency

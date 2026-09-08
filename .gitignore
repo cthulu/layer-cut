@@ -1,4 +1,5 @@
 build/
+build-app/
 build-sanitize/
 .build/
 macos-app/engine/

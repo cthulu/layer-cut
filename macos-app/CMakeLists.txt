@@ -57,6 +57,13 @@ set_target_properties(LayerCutApp PROPERTIES
   XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${PROJECT_SOURCE_DIR}/LayerCut.entitlements"
 )
 
+# Make the application available under Products/Applications in an Xcode
+# archive. Without an install rule, xcodebuild can report a successful archive
+# while leaving the archive's Products directory empty.
+install(TARGETS LayerCutApp
+  BUNDLE DESTINATION Applications
+)
+
 if(BUILD_TESTING)
   add_executable(LayerCutProfileTests
     Sources/LayerCutApp/Profile.swift
