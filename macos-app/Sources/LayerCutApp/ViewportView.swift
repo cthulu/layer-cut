@@ -35,6 +35,7 @@ final class OrbitARView: ARView {
     private var planeEntity: ModelEntity?
     private var gridEntity: ModelEntity?
     private var lastPoint: CGPoint?
+    private var rightDragPans = false
     private var yaw = Float.zero
     private var pitch = Float.zero
     private var pan = SIMD3<Float>.zero
@@ -81,8 +82,10 @@ final class OrbitARView: ARView {
 
     func resetCamera() {
         // Cura-like default: a three-quarter view with the top and two sides visible.
-        yaw = -0.65
-        pitch = -0.55
+        // Cura-like isometric view: elevated above the base with two side faces
+        // visible at a balanced 45-degree horizontal angle.
+        yaw = 0.00
+        pitch = 1.1222
         pan = .zero
         distance = lastSnapshot.map { cameraDistance(for: $0.bounds) } ?? 100
         updateOrbitCamera()
@@ -106,7 +109,9 @@ final class OrbitARView: ARView {
         let width = max(snapshot.bounds.max.x - snapshot.bounds.min.x, 1)
         let depth = max(snapshot.bounds.max.y - snapshot.bounds.min.y, 1)
         guard let mesh = RealityKitMeshAdapter.plane(width: width * 1.08, depth: depth * 1.08) else { return }
-        let plane = ModelEntity(mesh: mesh, materials: [SimpleMaterial(color: .systemOrange.withAlphaComponent(0.28), isMetallic: false)])
+        var planeMaterial = UnlitMaterial()
+        planeMaterial.color = .init(tint: .systemOrange.withAlphaComponent(0.36))
+        let plane = ModelEntity(mesh: mesh, materials: [planeMaterial])
         let z = activeLayerZ.map(Float.init) ?? snapshot.bounds.min.z + Float(activeLayer) * Float(lastLayerHeight)
         let centerX = (snapshot.bounds.min.x + snapshot.bounds.max.x) / 2
         let centerY = (snapshot.bounds.min.y + snapshot.bounds.max.y) / 2
@@ -118,9 +123,10 @@ final class OrbitARView: ARView {
                                                  minY: snapshot.bounds.min.y,
                                                  maxY: snapshot.bounds.max.y,
                                                  spacing: 5) {
-            let grid = ModelEntity(mesh: mesh,
-                                   materials: [SimpleMaterial(color: .systemGray.withAlphaComponent(0.45), isMetallic: false)])
-            grid.position = SIMD3<Float>(0, 0, z + 0.02)
+            var gridMaterial = UnlitMaterial()
+            gridMaterial.color = .init(tint: .systemGray)
+            let grid = ModelEntity(mesh: mesh, materials: [gridMaterial])
+            grid.position = SIMD3<Float>(0, 0, z + 0.05)
             contentAnchor.addChild(grid)
             gridEntity = grid
         }
@@ -130,8 +136,18 @@ final class OrbitARView: ARView {
         let yawRotation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 0, 1))
         let pitchRotation = simd_quatf(angle: pitch, axis: SIMD3<Float>(1, 0, 0))
         let rotation = yawRotation * pitchRotation
-        let position = pan + rotation.act(SIMD3<Float>(0, 0, distance))
-        orbitCamera.look(at: pan, from: position, relativeTo: nil)
+        let target = cameraTarget + pan
+        let position = target + rotation.act(SIMD3<Float>(0, 0, distance))
+        orbitCamera.look(at: target, from: position, relativeTo: nil)
+    }
+
+    /// Aim at the centre of the model's base plane so the footprint is centred
+    /// in the viewport while preserving the engine's original coordinates.
+    private var cameraTarget: SIMD3<Float> {
+        guard let bounds = lastSnapshot?.bounds else { return .zero }
+        return SIMD3<Float>((bounds.min.x + bounds.max.x) / 2,
+                            (bounds.min.y + bounds.max.y) / 2,
+                            bounds.min.z)
     }
 
     private func cameraDistance(for bounds: (min: SIMD3<Float>, max: SIMD3<Float>)) -> Float {
@@ -142,13 +158,22 @@ final class OrbitARView: ARView {
     override func rightMouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         lastPoint = convert(event.locationInWindow, from: nil)
+        rightDragPans = event.modifierFlags.contains(.shift)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
-        orbit(with: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        if rightDragPans {
+            pan(with: point)
+        } else {
+            orbit(with: point)
+        }
     }
 
-    override func rightMouseUp(with event: NSEvent) { lastPoint = nil }
+    override func rightMouseUp(with event: NSEvent) {
+        lastPoint = nil
+        rightDragPans = false
+    }
 
     override func otherMouseDown(with event: NSEvent) {
         lastPoint = convert(event.locationInWindow, from: nil)
@@ -156,12 +181,7 @@ final class OrbitARView: ARView {
 
     override func otherMouseDragged(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let previous = lastPoint else { lastPoint = point; return }
-        let delta = point - previous
-        lastPoint = point
-        let speed = max(distance * 0.002, 0.05)
-        pan += SIMD3<Float>(Float(delta.x) * speed, -Float(delta.y) * speed, 0)
-        updateOrbitCamera()
+        pan(with: point)
     }
 
     override func otherMouseUp(with event: NSEvent) { lastPoint = nil }
@@ -178,6 +198,15 @@ final class OrbitARView: ARView {
         lastPoint = point
         yaw += Float(delta.x) * 0.01
         pitch = min(max(pitch + Float(delta.y) * 0.01, -1.45), 1.45)
+        updateOrbitCamera()
+    }
+
+    private func pan(with point: CGPoint) {
+        guard let previous = lastPoint else { lastPoint = point; return }
+        let delta = point - previous
+        lastPoint = point
+        let speed = max(distance * 0.002, 0.05)
+        pan += SIMD3<Float>(Float(delta.x) * speed, -Float(delta.y) * speed, 0)
         updateOrbitCamera()
     }
 }
@@ -234,8 +263,10 @@ enum RealityKitMeshAdapter {
             let length = max(sqrt(dx * dx + dy * dy), 0.001)
             let px = -dy / length * bar / 2
             let py = dx / length * bar / 2
-            positions += [SIMD3(x0 + px, y0 + py, 0), SIMD3(x1 + px, y1 + py, 0),
-                          SIMD3(x1 - px, y1 - py, 0), SIMD3(x0 - px, y0 - py, 0)]
+            // Keep every bar wound counter-clockwise from the +Z side so RealityKit
+            // does not cull alternating grid directions.
+            positions += [SIMD3(x0 - px, y0 - py, 0), SIMD3(x1 - px, y1 - py, 0),
+                          SIMD3(x1 + px, y1 + py, 0), SIMD3(x0 + px, y0 + py, 0)]
             indices += [start, start + 1, start + 2, start, start + 2, start + 3]
         }
 

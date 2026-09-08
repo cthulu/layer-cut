@@ -114,7 +114,7 @@ private struct ContentView: View {
                          ZStack {
                              ViewportView(snapshot: stackedSnapshot, activeLayer: activeLayer,
                                           layerHeight: profiles.activeProfile.layerHeight, activeLayerZ: nil,
-                                          resetCameraID: stackedResetCameraID, onLayerChange: { _ in })
+                                              resetCameraID: stackedResetCameraID, onLayerChange: { _ in })
                                  .frame(maxWidth: .infinity, maxHeight: .infinity)
                              if stackedSnapshot != nil {
                                  EmptyView()
@@ -469,7 +469,7 @@ private struct CameraControls: View {
             .buttonStyle(.borderless)
             .accessibilityHint(expanded ? "Hides camera and layer controls" : "Shows camera help, reset, and layer controls")
             if expanded {
-                Text("Cura-like controls: right-drag orbits around the model; middle-drag pans; scroll zooms. Horizontal drag changes yaw, vertical drag changes pitch.")
+                Text("Cura-like controls: right-drag orbits around the model; Shift + right-drag or middle-drag pans; scroll zooms. Horizontal drag changes yaw, vertical drag changes pitch.")
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button("Reset camera", action: onResetCamera)
