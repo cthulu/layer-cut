@@ -75,7 +75,10 @@ int main(int argc, char* argv[]) {
   double minimum_bridge_width = 0.0;
   double cricut_gap = 3.0;
   double cricut_guide_inset = 1.0;
+  std::string cricut_packing = "fixed";
   bool cricut_combined = false;
+  bool layer_numbers = false;
+  double layer_number_font_size = 2.5;
   std::string stl_path;
   std::string stacked_stl_path;
 
@@ -110,10 +113,18 @@ int main(int argc, char* argv[]) {
       ->check(CLI::Range(0.0, 1000000.0));
   app.add_option("--cricut-gap", cricut_gap,
                  "Cricut tile gap in millimetres (default: 3)");
+  app.add_option("--packing", cricut_packing,
+                 "Cricut packing strategy: fixed or tight (default: fixed)")
+      ->check(CLI::IsMember({"fixed", "tight"}));
   app.add_option("--cricut-guide-inset", cricut_guide_inset,
                  "Cricut guide inset in millimetres (default: 1)");
   app.add_flag("--cricut-combined", cricut_combined,
                "Write one SVG per Cricut page with cut and pen groups");
+  app.add_flag("--layer-numbers", layer_numbers,
+               "Add layer numbers to combined Cricut SVG pages");
+  app.add_option("--layer-number-font-size", layer_number_font_size,
+                 "Layer number font size in millimetres (default: 2.5)")
+      ->check(CLI::Range(0.01, 100.0));
   app.add_option("--stacked-stl", stacked_stl_path,
                  "Optional watertight stacked-layer preview STL path");
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
@@ -138,6 +149,10 @@ int main(int argc, char* argv[]) {
   }
   if (cricut_combined && format != "cricut-normal" && format != "cricut-large") {
     std::cerr << "Error: --cricut-combined requires a Cricut page format.\n";
+    return 2;
+  }
+  if (layer_numbers && !cricut_combined) {
+    std::cerr << "Error: --layer-numbers requires --cricut-combined.\n";
     return 2;
   }
 
@@ -212,6 +227,11 @@ int main(int argc, char* argv[]) {
                             ? layer_cut::CricutPageSize::LARGE
                             : layer_cut::CricutPageSize::NORMAL;
     page_options.gap_mm = cricut_gap;
+    page_options.packing = cricut_packing == "tight"
+                               ? layer_cut::CricutPackingStrategy::TIGHT
+                               : layer_cut::CricutPackingStrategy::FIXED;
+    page_options.show_layer_numbers = layer_numbers;
+    page_options.layer_number_font_size_mm = layer_number_font_size;
     const auto pages = layer_cut::build_cricut_pages(prepared_layers, page_options);
     if (!pages.ok()) {
       std::cerr << "Error: Cricut page generation failed: " << pages.error << "\n";

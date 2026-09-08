@@ -40,4 +40,5 @@ and stable filenames.
 ## Future Strategy
 
 Reserve `tight-packing` in the internal strategy model. Do not implement it here.
-It will later pack actual layer rectangles, still without rotation initially.
+It will later pack actual layer rectangles and may use the deterministic
+orthogonal rotations defined by the tight-packing specification.

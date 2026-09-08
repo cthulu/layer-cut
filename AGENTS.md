@@ -96,6 +96,9 @@ feat: add STL binary parser
   profiles, output directories, recent STL paths, appearance, About/licenses,
   and reproducible Release packaging with hardened runtime, signing, DMG, and
   optional notarization documentation.
+- Cricut integration Step 17 is implemented: optional combined-SVG layer numbers
+  are configured through the engine, C ABI, CLI, and macOS profiles, with
+  deterministic bounding-box placement including shapes smaller than the label.
 
 ## Updating This File
 

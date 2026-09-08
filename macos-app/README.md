@@ -66,8 +66,9 @@ macos-app/
 - The application target is generated from the root CMake project.
 - The C ABI (`layer_cut.h`) is the contract between the C++ engine and Swift.
   All Swift engine bindings must use opaque handles with explicit cleanup.
-- The RealityKit viewport orbits with a secondary-button drag, while the
-  camera interaction remains separate from engine transforms.
+- The RealityKit viewport starts in a Cura-like three-quarter orientation.
+  Secondary-button drag orbits around the target, middle-button drag pans, and
+  scroll zooms; camera interaction remains separate from engine transforms.
 - Viewport coordinates are engine millimetres with Z up. RealityKit conversion
   is isolated in `ViewportView.swift`; the C ABI remains plain vertex/index data.
 - The viewport supports orbit, pan, zoom, profile-driven axis/rotation/scale

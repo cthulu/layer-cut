@@ -54,9 +54,11 @@ int main(void) {
 
   slicer_config_t page_config = slicer_config_create();
   if (!page_config || !slicer_config_set_layer_height(page_config, 0.2) ||
-      !slicer_config_set_format(page_config, SLICER_FORMAT_CRICUT_NORMAL) ||
-      !slicer_config_set_cricut_gap(page_config, 3.0) ||
-      !slicer_config_set_cricut_guide_inset(page_config, 1.0)) {
+       !slicer_config_set_format(page_config, SLICER_FORMAT_CRICUT_NORMAL) ||
+       !slicer_config_set_cricut_gap(page_config, 3.0) ||
+       !slicer_config_set_show_layer_numbers(page_config, 1) ||
+       !slicer_config_set_layer_number_font_size(page_config, 2.5) ||
+       !slicer_config_set_cricut_guide_inset(page_config, 1.0)) {
     status = 5;
     slicer_free_config(page_config);
     goto cleanup_config;

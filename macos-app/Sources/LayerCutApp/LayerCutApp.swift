@@ -9,7 +9,13 @@ struct LayerCutApp: App {
     @StateObject private var profiles = ProfileController(preferredID: AppSettingsController.load().defaultProfileID)
 
     var body: some SwiftUI.Scene {
-        WindowGroup("Layer Cut") { ContentView().frame(minWidth: 980, minHeight: 640).environmentObject(appSettings).environmentObject(profiles).preferredColorScheme(appSettings.settings.appearance.colorScheme) }
+        WindowGroup("Layer Cut") {
+            ContentView()
+                .frame(minWidth: 980, minHeight: 640)
+                .background(WindowMaximizer())
+                .environmentObject(appSettings).environmentObject(profiles)
+                .preferredColorScheme(appSettings.settings.appearance.colorScheme)
+        }
             .commands {
                 CommandGroup(replacing: .newItem) {
                     Button("Open STL…") {
@@ -67,82 +73,75 @@ private struct ContentView: View {
     @State private var activeLayer = 0
     @State private var resetCameraID = 0
     @State private var viewportError: String?
+    @State private var cameraControlsExpanded = false
+    @State private var stackedCameraControlsExpanded = false
+    @State private var stackedResetCameraID = 0
 
     private let meshService = MeshService()
 
     var body: some View {
         NavigationSplitView {
-            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status)
+            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status, onShowDiagnostics: { DiagnosticsWindowController.show(diagnostics) })
                 .safeAreaInset(edge: .bottom) {
                     if let error = profiles.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(8) }
                 }
                 .navigationTitle("Layer Cut")
                 .navigationSplitViewColumnWidth(min: 360, ideal: 390, max: 440)
         } detail: {
-            VStack(spacing: 0) {
+             VStack(spacing: 0) {
                  HSplitView {
-                 VStack(spacing: 0) {
-                     Text("Original STL model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                    ViewportView(snapshot: snapshot,
-                             activeLayer: activeLayer,
-                             layerHeight: profiles.activeProfile.layerHeight,
-                             activeLayerZ: layerOutput?.layers.first(where: { $0.index == activeLayer })?.z,
-                             resetCameraID: resetCameraID,
-                             onLayerChange: { activeLayer = $0 })
-                    .overlay(alignment: .topLeading) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Right-drag orbit  •  Middle-drag pan  •  Scroll zoom")
-                            HStack {
-                                Button { resetCameraID += 1 } label: { Label("Reset camera", systemImage: "camera.rotate") }
-                                Button {
-                                    var profile = profiles.activeProfile
-                                    profile.axis = "+Z"
-                                    profile.rotation = 0
-                                    profile.scale = 1
-                                    profiles.activeProfile = profile
-                                } label: { Label("Reset transform", systemImage: "arrow.uturn.backward") }
-                            }
-                            if let snapshot {
-                                let count = max(1, Int(ceil(Double(snapshot.bounds.max.z - snapshot.bounds.min.z) / profiles.activeProfile.layerHeight)))
-                                Stepper("Layer \(min(activeLayer + 1, count)) / \(count)", value: $activeLayer, in: 0...(count - 1))
-                            }
-                            if let viewportError { Text(viewportError).foregroundStyle(.red) }
-                        }
-                        .font(.caption)
-                        .padding(10)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding()
-                    }
-                     .frame(minWidth: 360, minHeight: 240)
-                 }
-                 VStack(spacing: 0) {
-                     Text("Stacked layer model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                     if let stackedSnapshot {
-                        ViewportView(snapshot: stackedSnapshot,
-                                     activeLayer: activeLayer,
-                                     layerHeight: profiles.activeProfile.layerHeight,
-                                     activeLayerZ: nil,
-                                      resetCameraID: resetCameraID,
-                                      onLayerChange: { _ in })
-                     } else if isGeneratingStackedPreview {
-                         ProgressView("Generating stacked preview…")
-                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                     } else {
-                         ContentUnavailableView("Stacked preview unavailable", systemImage: "cube.transparent", description: Text(stackedPreviewError ?? "The active profile did not produce a stacked STL."))
+                     VStack(spacing: 0) {
+                         Text("Original STL model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                         ZStack {
+                             ViewportView(snapshot: snapshot, activeLayer: activeLayer,
+                                          layerHeight: profiles.activeProfile.layerHeight,
+                                          activeLayerZ: layerOutput?.layers.first(where: { $0.index == activeLayer })?.z,
+                                          resetCameraID: resetCameraID, onLayerChange: { activeLayer = $0 })
+                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                             if snapshot == nil {
+                                 ViewportStateView(title: modelPath == nil ? "No model loaded" : "Loading original model…",
+                                                   message: viewportError ?? (modelPath == nil ? "Open an STL to inspect the model." : "Preparing the engine mesh snapshot."),
+                                                   systemImage: modelPath == nil ? "cube.transparent" : "hourglass")
+                             }
+                             CameraControls(expanded: $cameraControlsExpanded, activeLayer: $activeLayer,
+                                            layerCount: layerCount, onResetCamera: { resetCameraID += 1 },
+                                            onResetTransform: resetTransform)
+                         }
+                         .frame(minWidth: 360, minHeight: 240)
+                     }
+                     VStack(spacing: 0) {
+                         Text("Stacked layer model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                         ZStack {
+                             ViewportView(snapshot: stackedSnapshot, activeLayer: activeLayer,
+                                          layerHeight: profiles.activeProfile.layerHeight, activeLayerZ: nil,
+                                          resetCameraID: stackedResetCameraID, onLayerChange: { _ in })
+                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                             if stackedSnapshot != nil {
+                                 EmptyView()
+                             } else if isGeneratingStackedPreview {
+                                 ViewportStateView(title: "Stacked preview loading…", message: "Generating the engine stacked-layer snapshot.", systemImage: "hourglass")
+                             } else {
+                                 ViewportStateView(title: "Stacked preview unavailable", message: stackedPreviewError ?? "Enable live preview or generate a stacked preview from the sidebar.", systemImage: "cube.transparent")
+                             }
+                             if stackedSnapshot != nil {
+                                 CameraControls(expanded: $stackedCameraControlsExpanded, activeLayer: $activeLayer,
+                                                layerCount: layerCount, onResetCamera: { stackedResetCameraID += 1 },
+                                                onResetTransform: resetTransform)
+                             }
+                         }
+                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                         .frame(minWidth: 360, minHeight: 240)
                      }
                  }
-                 .frame(minWidth: 360, minHeight: 240)
-                 }
-                 }
                 Text("\(modelName)  |  \(status)").font(.callout).foregroundStyle(.secondary).padding(12)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.windowBackground)
-         .task(id: snapshotTaskKey) { await refreshSnapshots() }
+             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.windowBackground)
+         }
+          .task(id: snapshotTaskKey) { await refreshSnapshots() }
           .onChange(of: profiles.activeProfile) { _, _ in
              layerOutput = nil
              layerOutputIdentity = nil
              previewError = nil
-              cancelPreview()
-               cancelPreview()
+                cancelPreview()
               cancelStackedPreview()
                if appSettings.settings.livePreview { startStackedPreview() }
           }
@@ -167,11 +166,30 @@ private struct ContentView: View {
         } message: {
             Text("The export contains existing files: \((pendingOverwritePaths ?? []).joined(separator: ", "))")
         }
-        .alert("Export Error", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+         .alert("Export Error", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button { exportError = nil } label: { Label("OK", systemImage: "checkmark") }.keyboardShortcut(.defaultAction)
-        } message: {
-            Text(exportError ?? "Unknown export error")
-        }
+         } message: {
+             Text(exportError ?? "Unknown export error")
+         }
+     }
+
+    private var layerCount: Int {
+        guard let snapshot else { return 1 }
+        return max(1, Int(ceil(Double(snapshot.bounds.max.z - snapshot.bounds.min.z) / profiles.activeProfile.layerHeight)))
+    }
+
+    private var diagnostics: [ExportDiagnostic] {
+        guard let report = exportReport else { return [] }
+        return report.summary.diagnostics +
+            report.failures.map { ExportDiagnostic(severity: .error, message: "\($0.path): \($0.message)") }
+    }
+
+    private func resetTransform() {
+        var profile = profiles.activeProfile
+        profile.axis = "+Z"
+        profile.rotation = 0
+        profile.scale = 1
+        profiles.activeProfile = profile
     }
 
     private func openStlPanel() {
@@ -400,6 +418,124 @@ private struct SettingsView: View {
     private func chooseOutputDirectory() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url { appSettings.settings.defaultOutputDirectory = url.path }
+    }
+}
+
+private struct WindowMaximizer: NSViewRepresentable {
+    final class Coordinator {
+        var didMaximize = false
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard !context.coordinator.didMaximize,
+                  let window = nsView.window, !window.isZoomed else { return }
+            context.coordinator.didMaximize = true
+            window.zoom(nil)
+        }
+    }
+}
+
+private struct ViewportStateView: View {
+    let title: String
+    let message: String
+    let systemImage: String
+
+    var body: some View {
+        ContentUnavailableView(title, systemImage: systemImage, description: Text(message))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.windowBackground.opacity(0.92))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Viewport: \(title). \(message)")
+    }
+}
+
+private struct CameraControls: View {
+    @Binding var expanded: Bool
+    @Binding var activeLayer: Int
+    let layerCount: Int
+    let onResetCamera: () -> Void
+    let onResetTransform: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } } label: {
+                Label(expanded ? "Hide camera controls" : "Show camera controls",
+                      systemImage: expanded ? "chevron.up.circle" : "camera.rotate")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityHint(expanded ? "Hides camera and layer controls" : "Shows camera help, reset, and layer controls")
+            if expanded {
+                Text("Cura-like controls: right-drag orbits around the model; middle-drag pans; scroll zooms. Horizontal drag changes yaw, vertical drag changes pitch.")
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Reset camera", action: onResetCamera)
+                    Button("Reset transform", action: onResetTransform)
+                }
+                Stepper("Layer \(min(activeLayer + 1, layerCount)) / \(layerCount)", value: $activeLayer, in: 0...max(0, layerCount - 1))
+            }
+        }
+        .font(.caption)
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .padding()
+        .frame(maxWidth: 390, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct DiagnosticsSheet: View {
+    let diagnostics: [ExportDiagnostic]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Export diagnostics").font(.title2.weight(.semibold))
+                Spacer()
+                Text("\(diagnostics.count) message(s)").foregroundStyle(.secondary)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(diagnostics) { diagnostic in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Label(diagnostic.severity == .error ? "Error" : "Warning",
+                                  systemImage: diagnostic.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(diagnostic.severity == .error ? .red : .orange)
+                                .accessibilityLabel(diagnostic.severity == .error ? "Export error" : "Export warning")
+                            Text(diagnostic.message).textSelection(.enabled)
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private enum DiagnosticsWindowController {
+    private static var window: NSWindow?
+
+    static func show(_ diagnostics: [ExportDiagnostic]) {
+        if let window {
+            window.contentViewController = NSHostingController(rootView: DiagnosticsSheet(diagnostics: diagnostics))
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: DiagnosticsSheet(diagnostics: diagnostics)))
+        window.title = "Export diagnostics"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 560, height: 400))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
     }
 }
 

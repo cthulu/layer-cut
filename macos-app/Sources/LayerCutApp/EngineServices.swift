@@ -199,7 +199,16 @@ private func configure(_ config: ConfigHandle, profile: SlicingProfile,
     try configSetFormat(config, outputFormat(profile.outputFormat))
     try configSetDpi(config, dpi: Int32(profile.outputDPI))
     try configSetCricutGap(config, gap: profile.cricutGap)
+    guard layer_cut_config_set_cricut_packing(config.raw, profile.packing == "tight" ? 1 : 0) != 0 else {
+        throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid Cricut packing strategy")
+    }
     try configSetCricutGuideInset(config, inset: profile.guideInset)
+    guard layer_cut_config_set_show_layer_numbers(config.raw, profile.showLayerNumbers ? 1 : 0) != 0 else {
+        throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid layer numbering setting")
+    }
+    guard layer_cut_config_set_layer_number_font_size(config.raw, profile.layerNumberFontSize) != 0 else {
+        throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid layer number font size")
+    }
     try configSetCleanupMode(config, cleanupMode(profile.cleanupMode))
     try configSetCleanupThresholds(config, featureWidth: profile.featureWidth, islandArea: profile.islandArea, holeWidth: profile.holeWidth, bridgeWidth: profile.bridgeWidth)
     let box = ProgressBox(handler: progress)

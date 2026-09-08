@@ -9,11 +9,15 @@
 namespace layer_cut {
 
 enum class CricutPageSize { NORMAL, LARGE };
+enum class CricutPackingStrategy { FIXED, TIGHT };
 
 struct CricutPageOptions {
   CricutPageSize size = CricutPageSize::NORMAL;
+  CricutPackingStrategy packing = CricutPackingStrategy::FIXED;
   double gap_mm = 3.0;
   std::size_t path_limit = 4500;
+  bool show_layer_numbers = false;
+  double layer_number_font_size_mm = 2.5;
 };
 
 struct CricutTile {
@@ -21,6 +25,9 @@ struct CricutTile {
   double z = 0.0;
   double origin_x = 0.0;
   double origin_y = 0.0;
+  double width_mm = 0.0;
+  double height_mm = 0.0;
+  int orientation_degrees = 0;
   std::vector<Contour> contours;
 };
 
@@ -32,6 +39,9 @@ struct CricutPage {
   double tile_height_mm = 0.0;
   std::vector<CricutTile> tiles;
   std::size_t cut_path_count = 0;
+  bool tight_packing = false;
+  bool show_layer_numbers = false;
+  double layer_number_font_size_mm = 2.5;
 };
 
 struct CricutPageResult {

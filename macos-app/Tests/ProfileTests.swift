@@ -14,6 +14,8 @@ struct ProfileTests {
         precondition(profile.name == "Default" && profile.layerHeight == 1 && profile.axis == "+Z")
         precondition(profile.outputFormat == "cricut-normal" && profile.packing == "fixed")
         precondition(profile.cricutGap == 3 && profile.guideInset == 1 && profile.cleanupMode == "warn")
+        precondition(!profile.showLayerNumbers)
+        precondition(profile.layerNumberFontSize == 2.5)
         _ = try profile.validated()
     }
 
@@ -21,12 +23,16 @@ struct ProfileTests {
         let url = temporaryURL("roundtrip")
         defer { try? FileManager.default.removeItem(at: url) }
         var profile = SlicingProfile.defaultProfile
+        profile.showLayerNumbers = true
+        profile.layerNumberFontSize = 1.75
         profile.outputOptions = ["futureTolerance": "0.25", "newFlag": "true"]
         let store = ProfileStore(fileURL: url)
         try store.save([profile])
         precondition(store.load().first?.outputOptions == profile.outputOptions)
+        precondition(store.load().first?.showLayerNumbers == true)
+        precondition(store.load().first?.layerNumberFontSize == 1.75)
         let contents = try String(contentsOf: url)
-        precondition(contents.contains("futureTolerance"))
+        precondition(contents.contains("futureTolerance") && contents.contains("layerNumbers: true") && contents.contains("layerNumberFontSize: 1.75"))
     }
 
     private static func testInvalidFileRecoversToDefault() throws {

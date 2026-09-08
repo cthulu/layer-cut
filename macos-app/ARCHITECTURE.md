@@ -9,9 +9,11 @@ geometry engine.
 - SwiftUI owns windows, panels, profile editing, file selection, and export
   commands.
 - RealityKit owns the interactive 3D viewport.
-- The viewport uses an orbit camera: press and hold the secondary (right)
-  mouse button and drag to rotate around the model, matching the interaction
-  convention used by Cura and Fusion 360.
+- The viewport uses a Cura-like orbit camera: the default is a three-quarter
+  view showing the top and two side faces. Press and hold the secondary (right)
+  mouse button and drag to orbit around the camera target; horizontal movement
+  changes yaw and vertical movement changes clamped pitch. The middle button
+  pans, and the scroll wheel zooms. These controls are presentation-only.
 - Primary-button gestures remain available for selection and future direct
   manipulation; orbiting must not depend on a primary-button drag.
 - The frontend does not parse STL files or calculate mesh geometry itself.

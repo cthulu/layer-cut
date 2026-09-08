@@ -32,7 +32,10 @@ struct ConfigHandle {
   int format = SLICER_FORMAT_SVG;
   int dpi = 300;
   double cricut_gap = 3.0;
+  int cricut_packing = 0;
   double cricut_guide_inset = 1.0;
+  int show_layer_numbers = 0;
+  double layer_number_font_size_mm = 2.5;
   int cleanup_mode = 1;
   layer_cut::ManufacturingCleanupOptions cleanup;
   slicer_progress_callback_t progress_callback = nullptr;
@@ -191,12 +194,39 @@ int slicer_config_set_cricut_gap(slicer_config_t config, double gap_mm) {
   return 1;
 }
 
+int slicer_config_set_cricut_packing(slicer_config_t config, int tight) {
+  if (!valid_handle(config) || (tight != 0 && tight != 1)) {
+    fail("Invalid Cricut packing strategy");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->cricut_packing = tight;
+  return 1;
+}
+
 int slicer_config_set_cricut_guide_inset(slicer_config_t config, double inset_mm) {
   if (!valid_handle(config) || !std::isfinite(inset_mm) || inset_mm <= 0.0) {
     fail("Cricut guide inset must be positive and finite");
     return 0;
   }
   handle<ConfigHandle>(config)->cricut_guide_inset = inset_mm;
+  return 1;
+}
+
+int slicer_config_set_show_layer_numbers(slicer_config_t config, int enabled) {
+  if (!valid_handle(config) || (enabled != 0 && enabled != 1)) {
+    fail("Layer numbering must be 0 or 1");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->show_layer_numbers = enabled;
+  return 1;
+}
+
+int slicer_config_set_layer_number_font_size(slicer_config_t config, double size_mm) {
+  if (!valid_handle(config) || !std::isfinite(size_mm) || size_mm <= 0.0) {
+    fail("Layer number font size must be positive and finite");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->layer_number_font_size_mm = size_mm;
   return 1;
 }
 
@@ -319,6 +349,11 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
                             ? layer_cut::CricutPageSize::LARGE
                             : layer_cut::CricutPageSize::NORMAL;
     page_options.gap_mm = config_handle->cricut_gap;
+    page_options.packing = config_handle->cricut_packing
+                               ? layer_cut::CricutPackingStrategy::TIGHT
+                               : layer_cut::CricutPackingStrategy::FIXED;
+    page_options.show_layer_numbers = config_handle->show_layer_numbers != 0;
+    page_options.layer_number_font_size_mm = config_handle->layer_number_font_size_mm;
     const auto pages = layer_cut::build_cricut_pages(prepared_layers, page_options);
     if (!pages.ok()) {
       delete result;

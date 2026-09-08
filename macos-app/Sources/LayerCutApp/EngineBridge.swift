@@ -23,8 +23,17 @@ func layer_cut_config_set_dpi(_ config: UnsafeMutableRawPointer, _ dpi: Int32) -
 @_silgen_name("slicer_config_set_cricut_gap")
 func layer_cut_config_set_cricut_gap(_ config: UnsafeMutableRawPointer, _ gap: CDouble) -> Int32
 
+@_silgen_name("slicer_config_set_cricut_packing")
+func layer_cut_config_set_cricut_packing(_ config: UnsafeMutableRawPointer, _ tight: Int32) -> Int32
+
 @_silgen_name("slicer_config_set_cricut_guide_inset")
 func layer_cut_config_set_cricut_guide_inset(_ config: UnsafeMutableRawPointer, _ inset: CDouble) -> Int32
+
+@_silgen_name("slicer_config_set_show_layer_numbers")
+func layer_cut_config_set_show_layer_numbers(_ config: UnsafeMutableRawPointer, _ enabled: Int32) -> Int32
+
+@_silgen_name("slicer_config_set_layer_number_font_size")
+func layer_cut_config_set_layer_number_font_size(_ config: UnsafeMutableRawPointer, _ size: CDouble) -> Int32
 
 @_silgen_name("slicer_config_set_cleanup_mode")
 func layer_cut_config_set_cleanup_mode(_ config: UnsafeMutableRawPointer, _ mode: Int32) -> Int32

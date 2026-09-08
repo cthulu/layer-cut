@@ -12,6 +12,8 @@ struct SlicingProfile: Identifiable, Equatable, Sendable {
     var outputFormat: String
     var outputDPI: Int
     var combinedCricut: Bool
+    var showLayerNumbers: Bool
+    var layerNumberFontSize: Double
     var cleanupMode: String
     var featureWidth: Double
     var islandArea: Double
@@ -25,7 +27,9 @@ struct SlicingProfile: Identifiable, Equatable, Sendable {
     static let defaultProfile = SlicingProfile(
         id: UUID(), name: "Default", axis: "+Z", rotation: 0, scale: 1,
         layerHeight: 1, outputFormat: "cricut-normal", outputDPI: 96,
-        combinedCricut: false,
+         combinedCricut: false,
+         showLayerNumbers: false,
+         layerNumberFontSize: 2.5,
         cleanupMode: "warn", featureWidth: 0.4, islandArea: 1,
         holeWidth: 0.4, bridgeWidth: 0.4, packing: "fixed", cricutGap: 3,
         guideInset: 1, outputOptions: [:]
@@ -33,7 +37,7 @@ struct SlicingProfile: Identifiable, Equatable, Sendable {
 
     init(id: UUID = UUID(), name: String, axis: String = "+Z", rotation: Double = 0,
          scale: Double = 1, layerHeight: Double = 1, outputFormat: String = "cricut-normal",
-         outputDPI: Int = 96, combinedCricut: Bool = false, cleanupMode: String = "warn", featureWidth: Double = 0.4,
+          outputDPI: Int = 96, combinedCricut: Bool = false, showLayerNumbers: Bool = false, layerNumberFontSize: Double = 2.5, cleanupMode: String = "warn", featureWidth: Double = 0.4,
          islandArea: Double = 1, holeWidth: Double = 0.4, bridgeWidth: Double = 0.4,
          packing: String = "fixed", cricutGap: Double = 3, guideInset: Double = 1,
          outputOptions: [String: String] = [:]) {
@@ -46,6 +50,8 @@ struct SlicingProfile: Identifiable, Equatable, Sendable {
         self.outputFormat = outputFormat
         self.outputDPI = outputDPI
         self.combinedCricut = combinedCricut
+        self.showLayerNumbers = showLayerNumbers
+        self.layerNumberFontSize = layerNumberFontSize
         self.cleanupMode = cleanupMode
         self.featureWidth = featureWidth
         self.islandArea = islandArea
@@ -63,7 +69,7 @@ struct SlicingProfile: Identifiable, Equatable, Sendable {
         guard rotation.isFinite, (-180...180).contains(rotation), scale.isFinite, scale > 0, scale <= 10 else { throw ProfileError.invalid("Invalid transform") }
         guard layerHeight.isFinite, layerHeight > 0, layerHeight <= 100 else { throw ProfileError.invalid("Invalid layer height") }
         guard outputDPI > 0, cleanupMode == "preserve" || cleanupMode == "warn" || cleanupMode == "apply" else { throw ProfileError.invalid("Invalid output or cleanup settings") }
-        guard ["fixed", "tight"].contains(packing), cricutGap >= 0, guideInset >= 0 else { throw ProfileError.invalid("Invalid Cricut settings") }
+        guard ["fixed", "tight"].contains(packing), cricutGap.isFinite, guideInset >= 0, layerNumberFontSize.isFinite, layerNumberFontSize > 0 else { throw ProfileError.invalid("Invalid Cricut settings") }
         return self
     }
 }
@@ -153,12 +159,12 @@ struct ProfileStore {
             guard let (key, value) = pair(line) else { continue }
             if raw.hasPrefix("    ") && !raw.hasPrefix("      ") { section = key; continue }
             switch section {
-            case "orientation": if key == "axis" { current.axis = value } else if key == "rotation" { current.rotation = number(value) ?? current.rotation } else if key == "scale" { current.scale = number(value) ?? current.scale }
+             case "orientation": if key == "axis" { current.axis = value }
             case "slicing": if key == "layerHeight" { current.layerHeight = number(value) ?? current.layerHeight }
             case "output":
-                if key == "format" { current.outputFormat = value } else if key == "dpi" { current.outputDPI = Int(number(value) ?? Double(current.outputDPI)) } else if key == "combined" { current.combinedCricut = value == "true" } else { current.outputOptions[key] = value }
+                 if key == "format" { current.outputFormat = value } else if key == "dpi" { current.outputDPI = Int(number(value) ?? Double(current.outputDPI)) } else if key == "combined" { current.combinedCricut = value == "true" } else if key == "layerNumbers" { current.showLayerNumbers = value == "true" } else if key == "layerNumberFontSize" { current.layerNumberFontSize = number(value) ?? current.layerNumberFontSize } else { current.outputOptions[key] = value }
             case "cleanup": if key == "mode" { current.cleanupMode = value } else if key == "featureWidth" { current.featureWidth = number(value) ?? current.featureWidth } else if key == "islandArea" { current.islandArea = number(value) ?? current.islandArea } else if key == "holeWidth" { current.holeWidth = number(value) ?? current.holeWidth } else if key == "bridgeWidth" { current.bridgeWidth = number(value) ?? current.bridgeWidth }
-            case "cricut": if key == "packing" { current.packing = value } else if key == "gap" { current.cricutGap = number(value) ?? current.cricutGap } else if key == "guideInset" { current.guideInset = number(value) ?? current.guideInset }
+            case "cricut": if key == "packing" { current.packing = value } else if key == "gap" { current.cricutGap = number(value) ?? current.cricutGap } else if key == "guideInset" { current.guideInset = number(value) ?? current.guideInset } else if key == "layerNumberFontSize" { current.layerNumberFontSize = number(value) ?? current.layerNumberFontSize }
             default: break
             }
         }
@@ -170,11 +176,12 @@ struct ProfileStore {
     private func yaml(_ profiles: [SlicingProfile]) -> String {
         var result = "version: 1\nprofiles:\n"
         for p in profiles {
-            result += "  - name: \(quote(p.name))\n    orientation:\n      axis: \(quote(p.axis))\n      rotation: \(p.rotation)\n      scale: \(p.scale)\n    slicing:\n      layerHeight: \(p.layerHeight)\n    output:\n      format: \(quote(p.outputFormat))\n      dpi: \(p.outputDPI)\n      combined: \(p.combinedCricut)\n"
+            result += "  - name: \(quote(p.name))\n    orientation:\n      axis: \(quote(p.axis))\n    slicing:\n      layerHeight: \(p.layerHeight)\n    output:\n      format: \(quote(p.outputFormat))\n      dpi: \(p.outputDPI)\n      combined: \(p.combinedCricut)\n      layerNumbers: \(p.showLayerNumbers)\n"
             for key in p.outputOptions.keys.sorted() { result += "      \(key): \(quote(p.outputOptions[key] ?? ""))\n" }
             result += "    cleanup:\n      mode: \(quote(p.cleanupMode))\n      featureWidth: \(p.featureWidth)\n      islandArea: \(p.islandArea)\n      holeWidth: \(p.holeWidth)\n      bridgeWidth: \(p.bridgeWidth)\n    cricut:\n      packing: \(quote(p.packing))\n      gap: \(p.cricutGap)\n      guideInset: \(p.guideInset)\n"
-        }
-        return result
+             result += "      layerNumberFontSize: " + String(p.layerNumberFontSize) + "\n"
+         }
+         return result
     }
 
     private func pair(_ line: String) -> (String, String)? { guard let index = line.firstIndex(of: ":") else { return nil }; return (String(line[..<index]).trimmingCharacters(in: .whitespaces), unquote(String(line[line.index(after: index)...]).trimmingCharacters(in: .whitespaces))) }
@@ -214,7 +221,7 @@ final class ProfileController: ObservableObject {
 
     func duplicate() {
         var copy = activeProfile
-        copy = SlicingProfile(id: UUID(), name: uniqueName("\(copy.name) Copy"), axis: copy.axis, rotation: copy.rotation, scale: copy.scale, layerHeight: copy.layerHeight, outputFormat: copy.outputFormat, outputDPI: copy.outputDPI, combinedCricut: copy.combinedCricut, cleanupMode: copy.cleanupMode, featureWidth: copy.featureWidth, islandArea: copy.islandArea, holeWidth: copy.holeWidth, bridgeWidth: copy.bridgeWidth, packing: copy.packing, cricutGap: copy.cricutGap, guideInset: copy.guideInset, outputOptions: copy.outputOptions)
+        copy = SlicingProfile(id: UUID(), name: uniqueName("\(copy.name) Copy"), axis: copy.axis, rotation: copy.rotation, scale: copy.scale, layerHeight: copy.layerHeight, outputFormat: copy.outputFormat, outputDPI: copy.outputDPI, combinedCricut: copy.combinedCricut, showLayerNumbers: copy.showLayerNumbers, layerNumberFontSize: copy.layerNumberFontSize, cleanupMode: copy.cleanupMode, featureWidth: copy.featureWidth, islandArea: copy.islandArea, holeWidth: copy.holeWidth, bridgeWidth: copy.bridgeWidth, packing: copy.packing, cricutGap: copy.cricutGap, guideInset: copy.guideInset, outputOptions: copy.outputOptions)
         profiles.append(copy); selectedID = copy.id; persist()
     }
 

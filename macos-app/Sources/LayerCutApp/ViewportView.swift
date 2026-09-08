@@ -33,6 +33,7 @@ final class OrbitARView: ARView {
     private let contentAnchor = AnchorEntity(world: .zero)
     private var modelEntity: ModelEntity?
     private var planeEntity: ModelEntity?
+    private var gridEntity: ModelEntity?
     private var lastPoint: CGPoint?
     private var yaw = Float.zero
     private var pitch = Float.zero
@@ -79,8 +80,9 @@ final class OrbitARView: ARView {
     }
 
     func resetCamera() {
-        yaw = 0
-        pitch = 0
+        // Cura-like default: a three-quarter view with the top and two sides visible.
+        yaw = -0.65
+        pitch = -0.55
         pan = .zero
         distance = lastSnapshot.map { cameraDistance(for: $0.bounds) } ?? 100
         updateOrbitCamera()
@@ -98,15 +100,30 @@ final class OrbitARView: ARView {
     private func updateSlicePlane(snapshot: MeshSnapshot?, activeLayer: Int, activeLayerZ: Double?) {
         planeEntity?.removeFromParent()
         planeEntity = nil
+        gridEntity?.removeFromParent()
+        gridEntity = nil
         guard let snapshot else { return }
         let width = max(snapshot.bounds.max.x - snapshot.bounds.min.x, 1)
         let depth = max(snapshot.bounds.max.y - snapshot.bounds.min.y, 1)
         guard let mesh = RealityKitMeshAdapter.plane(width: width * 1.08, depth: depth * 1.08) else { return }
         let plane = ModelEntity(mesh: mesh, materials: [SimpleMaterial(color: .systemOrange.withAlphaComponent(0.28), isMetallic: false)])
         let z = activeLayerZ.map(Float.init) ?? snapshot.bounds.min.z + Float(activeLayer) * Float(lastLayerHeight)
-        plane.position = SIMD3<Float>(0, 0, z)
+        let centerX = (snapshot.bounds.min.x + snapshot.bounds.max.x) / 2
+        let centerY = (snapshot.bounds.min.y + snapshot.bounds.max.y) / 2
+        plane.position = SIMD3<Float>(centerX, centerY, z)
         contentAnchor.addChild(plane)
         planeEntity = plane
+        if let mesh = RealityKitMeshAdapter.grid(minX: snapshot.bounds.min.x,
+                                                 maxX: snapshot.bounds.max.x,
+                                                 minY: snapshot.bounds.min.y,
+                                                 maxY: snapshot.bounds.max.y,
+                                                 spacing: 5) {
+            let grid = ModelEntity(mesh: mesh,
+                                   materials: [SimpleMaterial(color: .systemGray.withAlphaComponent(0.45), isMetallic: false)])
+            grid.position = SIMD3<Float>(0, 0, z + 0.02)
+            contentAnchor.addChild(grid)
+            gridEntity = grid
+        }
     }
 
     private func updateOrbitCamera() {
@@ -160,7 +177,7 @@ final class OrbitARView: ARView {
         let delta = point - previous
         lastPoint = point
         yaw += Float(delta.x) * 0.01
-        pitch = min(max(pitch + Float(delta.y) * 0.01, -1.5), 1.5)
+        pitch = min(max(pitch + Float(delta.y) * 0.01, -1.45), 1.45)
         updateOrbitCamera()
     }
 }
@@ -200,6 +217,36 @@ enum RealityKitMeshAdapter {
             SIMD3(halfWidth, halfDepth, 0), SIMD3(-halfWidth, halfDepth, 0)
         ])
         descriptor.primitives = .triangles([0, 1, 2, 0, 2, 3])
+        return try? MeshResource.generate(from: [descriptor])
+    }
+
+    /// Builds presentation-only 5 mm bars. This resource never crosses the engine boundary.
+    static func grid(minX: Float, maxX: Float, minY: Float, maxY: Float, spacing: Float) -> MeshResource? {
+        guard spacing > 0, maxX > minX, maxY > minY else { return nil }
+        var positions: [SIMD3<Float>] = []
+        var indices: [UInt32] = []
+        let bar = min(spacing * 0.025, 0.12)
+
+        func addBar(x0: Float, y0: Float, x1: Float, y1: Float) {
+            let start = UInt32(positions.count)
+            let dx = x1 - x0
+            let dy = y1 - y0
+            let length = max(sqrt(dx * dx + dy * dy), 0.001)
+            let px = -dy / length * bar / 2
+            let py = dx / length * bar / 2
+            positions += [SIMD3(x0 + px, y0 + py, 0), SIMD3(x1 + px, y1 + py, 0),
+                          SIMD3(x1 - px, y1 - py, 0), SIMD3(x0 - px, y0 - py, 0)]
+            indices += [start, start + 1, start + 2, start, start + 2, start + 3]
+        }
+
+        var x = ceil(minX / spacing) * spacing
+        while x <= maxX + 0.001 { addBar(x0: x, y0: minY, x1: x, y1: maxY); x += spacing }
+        var y = ceil(minY / spacing) * spacing
+        while y <= maxY + 0.001 { addBar(x0: minX, y0: y, x1: maxX, y1: y); y += spacing }
+
+        var descriptor = MeshDescriptor(name: "active-slice-grid-5mm")
+        descriptor.positions = MeshBuffers.Positions(positions)
+        descriptor.primitives = .triangles(indices)
         return try? MeshResource.generate(from: [descriptor])
     }
 }

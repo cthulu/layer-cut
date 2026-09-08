@@ -32,8 +32,8 @@ independent.
 - Use one guide file per page, with one independently selectable guide group per interface.
 - Use true inward offsets in millimetres for production guides.
 - Omit guides that cannot be contained by the previous layer and emit warnings.
-- Keep `tight-packing` as a future strategy until its implementation spec is
-  complete.
+- `tight-packing` is implemented as an optional deterministic shelf strategy;
+  `fixed` remains the default.
 - Keep layer numbering disabled by default and limited to combined Cricut SVGs.
 - Add an optional accurate, watertight stacked STL preview.
 - Do not attempt automated Design Space validation; validation is manual only.

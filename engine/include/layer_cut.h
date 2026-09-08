@@ -39,7 +39,10 @@ int slicer_config_set_canvas(slicer_config_t config, double width_mm,
 int slicer_config_set_format(slicer_config_t config, int format);
 int slicer_config_set_dpi(slicer_config_t config, int dpi);
 int slicer_config_set_cricut_gap(slicer_config_t config, double gap_mm);
+int slicer_config_set_cricut_packing(slicer_config_t config, int tight);
 int slicer_config_set_cricut_guide_inset(slicer_config_t config, double inset_mm);
+int slicer_config_set_show_layer_numbers(slicer_config_t config, int enabled);
+int slicer_config_set_layer_number_font_size(slicer_config_t config, double size_mm);
 int slicer_config_set_cleanup_mode(slicer_config_t config, int mode);
 int slicer_config_set_progress_callback(slicer_config_t config,
                                          slicer_progress_callback_t callback,

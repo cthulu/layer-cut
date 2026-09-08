@@ -18,6 +18,7 @@ struct ExportSummary: Sendable, Equatable {
     let pageCount: Int
     let totalBytes: Int
     let warnings: [String]
+    let diagnostics: [ExportDiagnostic]
 }
 
 struct ExportReport: Sendable {
@@ -25,6 +26,13 @@ struct ExportReport: Sendable {
     let written: [String]
     let failures: [ExportFailure]
     let completion: ExportCompletion
+}
+
+struct ExportDiagnostic: Identifiable, Sendable, Equatable {
+    enum Severity: String, Sendable { case warning, error }
+    let id = UUID()
+    let severity: Severity
+    let message: String
 }
 
 enum ExportError: LocalizedError {
@@ -104,10 +112,16 @@ final class ExportCoordinator: Sendable {
                     }
                     progress?(Double(index + 1) / Double(max(artifacts.count, 1)))
                 }
+                let diagnostics = output.warnings.map { ExportDiagnostic(severity: .warning, message: $0) } +
+                    output.diagnostics.map { diagnostic in
+                        ExportDiagnostic(severity: diagnostic.severity == .error ? .error : .warning,
+                                         message: diagnostic.message)
+                    }
                 let summary = ExportSummary(profileName: profile.name, format: profile.outputFormat,
                                             layerCount: output.layers.count, pageCount: output.pages.count,
                                             totalBytes: artifacts.reduce(0) { $0 + $1.data.count },
-                                            warnings: output.warnings + output.diagnostics.map(\.message))
+                                            warnings: diagnostics.filter { $0.severity == .warning }.map(\.message),
+                                            diagnostics: diagnostics)
                 return ExportReport(summary: summary, written: written, failures: failures,
                                     completion: failures.isEmpty ? .completed : .partialFailure)
                 }

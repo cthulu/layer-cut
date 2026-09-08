@@ -24,14 +24,14 @@ silently produce PNG pages; Cricut PNG pages remain unimplemented.
 Add options equivalent to:
 
 ```text
---packing fixed
+--packing fixed|tight
 --cricut-gap 3
 --cricut-guide-inset 1
 --cricut-combined
 ```
 
-The first implementation supports only `fixed`. Reserve `tight-packing` and
-return a clear unsupported-strategy error until its spec is implemented.
+`fixed` is the default. `tight` enables deterministic orthogonal shelf packing
+with no scaling or splitting.
 
 ## Behavior
 

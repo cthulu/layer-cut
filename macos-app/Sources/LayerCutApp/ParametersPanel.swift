@@ -21,6 +21,7 @@ struct ParametersPanel: View {
     let progress: Double
     let report: ExportReport?
     let status: String
+    let onShowDiagnostics: () -> Void
 
     private let axes = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
     private let formats = [("svg", "SVG"), ("png", "PNG"), ("stacked-svg", "Stacked SVG"), ("stacked-stl", "Stacked STL")]
@@ -86,14 +87,26 @@ struct ParametersPanel: View {
                         Text("\(report.summary.layerCount) layer(s), \(report.summary.pageCount) page(s), \(report.summary.totalBytes) bytes")
                             .font(.caption).foregroundStyle(.secondary)
                         if !report.failures.isEmpty { Text("\(report.failures.count) file(s) failed").font(.caption).foregroundStyle(.red) }
-                        ForEach(report.summary.warnings, id: \.self) { Text("Warning: \($0)").font(.caption).foregroundStyle(.orange) }
+                        if !report.summary.diagnostics.isEmpty || !report.failures.isEmpty {
+                            Button(action: onShowDiagnostics) {
+                                Label("Show diagnostics (\(report.summary.diagnostics.count + report.failures.count))",
+                                      systemImage: report.failures.isEmpty ? "exclamationmark.triangle" : "xmark.octagon")
+                            }
+                            .accessibilityHint("Opens a selectable list of export warnings and errors")
+                        }
                     }
                 }
             }
             DisclosureGroup("Cricut", isExpanded: $cricutExpanded) {
                 Picker("Packing", selection: profileBinding(\.packing)) { Text("Fixed").tag("fixed"); Text("Tight").tag("tight") }
-                TextField("Gap (mm)", value: profileBinding(\.cricutGap), format: numberFormat)
-                TextField("Guide inset (mm)", value: profileBinding(\.guideInset), format: numberFormat)
+                LabeledContent("Tile gap (mm)") {
+                    NumericField("Gap (mm)", value: profileBinding(\.cricutGap))
+                }
+                LabeledContent("Guide inset (mm)") {
+                    NumericField("Guide inset (mm)", value: profileBinding(\.guideInset))
+                }
+                Toggle("Show layer numbers in combined SVG", isOn: profileBinding(\.showLayerNumbers))
+                TextField("Number font size (mm)", value: profileBinding(\.layerNumberFontSize), format: numberFormat)
                 LabeledContent("Page estimate", value: profileController.activeProfile.outputFormat.contains("cricut") ? "Calculated on preview" : "Not applicable")
             }
         }
@@ -105,10 +118,10 @@ struct ParametersPanel: View {
     private var selectedFormat: String { ["cricut-normal", "cricut-large", "cricut-combined"].contains(profileController.activeProfile.outputFormat) ? "stacked-svg" : profileController.activeProfile.outputFormat }
     private var cricutSizeBinding: Binding<String> { Binding(get: { profileController.activeProfile.outputFormat == "cricut-large" ? "cricut-large" : "cricut-normal" }, set: { value in var profile = profileController.activeProfile; profile.outputFormat = value; profile.combinedCricut = true; profileController.activeProfile = profile }) }
     private func profileBinding(_ keyPath: WritableKeyPath<SlicingProfile, Double?>, default defaultValue: Double) -> Binding<Double> { Binding(get: { profileController.activeProfile[keyPath: keyPath] ?? defaultValue }, set: { var profile = profileController.activeProfile; profile[keyPath: keyPath] = $0 > 0 ? $0 : nil; profileController.activeProfile = profile }) }
-    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View { TextField(title, value: profileBinding(keyPath), format: numberFormat) }
+    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View { NumericField(title, value: profileBinding(keyPath)) }
     private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack { Text(title); Spacer(); TextField("", value: value, format: numberFormat).frame(width: 100) }
+            HStack { Text(title); Spacer(); NumericField(value: value).frame(width: 100) }
             HStack(spacing: 0) {
                 Slider(value: value, in: range)
                     .frame(maxWidth: .infinity)
@@ -122,4 +135,35 @@ struct ParametersPanel: View {
         .gridCellColumns(2)
     }
     private var numberFormat: FloatingPointFormatStyle<Double> { .number.locale(Locale(identifier: "C")).precision(.fractionLength(0...2)) }
+}
+
+private struct NumericField: View {
+    let title: String?
+    @Binding var value: Double
+    @State private var text = ""
+
+    init(_ title: String? = nil, value: Binding<Double>) {
+        self.title = title
+        self._value = value
+    }
+
+    var body: some View {
+        TextField("", text: $text)
+            .textFieldStyle(.roundedBorder)
+            .font(.body.monospacedDigit())
+            .multilineTextAlignment(.trailing)
+            .accessibilityLabel(title ?? "Numeric value")
+            .onAppear { text = renderedValue(value) }
+            .onChange(of: value) { _, newValue in
+                if Double(text) != newValue { text = renderedValue(newValue) }
+            }
+            .onChange(of: text) { _, newText in
+                if let parsed = Double(newText), parsed.isFinite { value = parsed }
+            }
+            .onSubmit { text = renderedValue(value) }
+    }
+
+    private func renderedValue(_ value: Double) -> String {
+        value.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).precision(.fractionLength(2)))
+    }
 }
