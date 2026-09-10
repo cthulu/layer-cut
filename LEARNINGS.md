@@ -11,3 +11,7 @@
 
 ## 3. Implementation Status
 - The viewport now correctly maintains the target orientation using the values `Yaw: 0.00`, `Pitch: 1.1222` for the desired view, and the camera reset function reliably uses these values to return to this state.
+
+## 4. Layer naming
+- Cricut compatibility learning: Cricut Design Space may ignore the current combined-SVG layer naming and display every layer with the same name (for
+example, `page_000_layers_000-021`). This is likely not fixable through SVG naming alone; treat it as a known limitation
