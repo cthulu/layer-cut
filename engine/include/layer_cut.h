@@ -49,6 +49,10 @@ int slicer_config_set_progress_callback(slicer_config_t config,
                                          void* context);
 int slicer_config_set_transform(slicer_config_t config, int axis,
                                 double rotation_degrees, double scale);
+int slicer_config_set_transform_euler(slicer_config_t config, int axis,
+                                      double rotate_x_degrees,
+                                      double rotate_y_degrees,
+                                      double rotate_z_degrees, double scale);
 int slicer_config_set_cancellation(slicer_config_t config,
                                    slicer_cancellation_t cancellation);
 int slicer_config_set_cleanup_thresholds(slicer_config_t config,
@@ -90,6 +94,11 @@ const char* slicer_mesh_diagnostic(slicer_mesh_t mesh, int index);
 int slicer_mesh_diagnostic_severity(slicer_mesh_t mesh, int index);
 int slicer_mesh_snapshot(slicer_mesh_t mesh, int axis, double rotation_degrees,
                          double scale, slicer_snapshot_t* snapshot);
+int slicer_mesh_snapshot_euler(slicer_mesh_t mesh, int axis,
+                               double rotate_x_degrees,
+                               double rotate_y_degrees,
+                               double rotate_z_degrees, double scale,
+                               slicer_snapshot_t* snapshot);
 const float* slicer_snapshot_vertices(slicer_snapshot_t snapshot, size_t* count);
 const uint32_t* slicer_snapshot_indices(slicer_snapshot_t snapshot, size_t* count);
 int slicer_snapshot_bounds(slicer_snapshot_t snapshot, slicer_bounds_t* bounds);

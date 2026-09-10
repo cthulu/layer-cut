@@ -24,6 +24,11 @@
 11. `20-polish-packaging.md`
 12. `21-ui-composition.md`
 13. `22-ui-refinements.md`
+14. `23-transform-model.md`
+15. `24-transform-api-cli.md`
+16. `25-transform-session-ui.md`
+17. `26-transform-reset-and-export.md`
+18. `27-transform-regression-tests.md`
 
 The engine transform and mesh snapshot work is intentionally listed between
 project setup and UI implementation because the viewport must not parse STL a
@@ -41,6 +46,10 @@ second time and exports must use the same transform shown in the viewport.
 - Progress/cancellation are required at the service boundary rather than left as
   an ambiguous future UI feature.
 - Full Xcode is a prerequisite; Command Line Tools alone are insufficient.
+- Geometric transforms are session-only; profiles do not persist cutting axis,
+  rotation, or scale.
+- Cutting orientation and independent X/Y/Z rotation use a fixed documented
+  composition order shared by the engine, CLI, and macOS app.
 
 ## Deferred
 

@@ -90,11 +90,12 @@ final class MeshService: Sendable {
         }.value
     }
 
-    func snapshot(path: String, axis: String, rotation: Double, scale: Double) async throws -> MeshSnapshot {
+    func snapshot(path: String, transform: TransformSession) async throws -> MeshSnapshot {
         try await Task.detached(priority: .userInitiated) {
             let mesh = try loadStl(path: path)
             var snapshot: UnsafeMutableRawPointer?
-            guard layer_cut_mesh_snapshot(mesh.raw, axisValue(axis), rotation, scale, &snapshot) != 0,
+            let value = transform.validated()
+            guard layer_cut_mesh_snapshot_euler(mesh.raw, axisValue(value.cuttingAxis), value.rotateX, value.rotateY, value.rotateZ, value.scale, &snapshot) != 0,
                   let snapshot else { throw EngineError.lastError(lastErrorMessage() ?? "Could not create mesh snapshot") }
                 defer { layer_cut_free_snapshot(snapshot) }
             var vertexCount = 0
@@ -115,12 +116,12 @@ final class MeshService: Sendable {
         }.value
     }
 
-    func stackedSnapshot(path: String, profile: SlicingProfile,
+    func stackedSnapshot(path: String, profile: SlicingProfile, transform: TransformSession,
                          progress: (@Sendable (Double) -> Void)? = nil) async throws -> MeshSnapshot {
         // Stacked STL is supplemental preview data, not the export format.
         var stackedPreviewProfile = profile
         stackedPreviewProfile.outputFormat = "svg"
-        let output = try await SlicingService().preview(path: path, profile: stackedPreviewProfile, progress: progress)
+        let output = try await SlicingService().preview(path: path, profile: stackedPreviewProfile, transform: transform, progress: progress)
         guard let data = output.stackedSTL, !data.isEmpty else {
             throw EngineError.noData("This profile did not produce a stacked STL preview")
         }
@@ -128,12 +129,14 @@ final class MeshService: Sendable {
             .appendingPathComponent("layer-cut-stacked-\(UUID().uuidString).stl")
         try data.write(to: temporaryURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
-        return try await snapshot(path: temporaryURL.path, axis: "+Z", rotation: 0, scale: 1)
+        // The stacked STL is generated from the already transformed slice. Reload
+        // it without applying the session transform a second time.
+        return try await snapshot(path: temporaryURL.path, transform: .identity)
     }
 }
 
 final class SlicingService: Sendable {
-    func slice(path: String, profile: SlicingProfile,
+    func slice(path: String, profile: SlicingProfile, transform: TransformSession = .identity,
                progress: (@Sendable (Double) -> Void)? = nil) async throws -> SliceOutput {
         let cancellation = try makeCancellation()
         return try await withTaskCancellationHandler {
@@ -141,7 +144,7 @@ final class SlicingService: Sendable {
                 defer { layer_cut_free_cancellation(cancellation.raw) }
                 let mesh = try loadStl(path: path)
                 let config = try createConfig()
-                let progressBox = try configure(config, profile: profile, cancellation: cancellation.raw, progress: progress)
+                let progressBox = try configure(config, profile: profile, transform: transform, cancellation: cancellation.raw, progress: progress)
                 _ = progressBox
                 guard let resultRaw = layer_cut_slice(mesh.raw, config.raw) else {
                     throw EngineError.sliceFailed(lastErrorMessage() ?? "Unknown slice error")
@@ -154,11 +157,11 @@ final class SlicingService: Sendable {
         }
     }
 
-    func preview(path: String, profile: SlicingProfile,
+    func preview(path: String, profile: SlicingProfile, transform: TransformSession = .identity,
                  dpi: Int = 96,
                  progress: (@Sendable (Double) -> Void)? = nil) async throws -> SliceOutput {
         _ = dpi
-        return try await slice(path: path, profile: profile, progress: progress)
+        return try await slice(path: path, profile: profile, transform: transform, progress: progress)
     }
 
     private func makeCancellation() throws -> CancellationBox {
@@ -172,9 +175,9 @@ final class SlicingService: Sendable {
 final class ExportService: Sendable {
     private let slicing = SlicingService()
 
-    func export(path: String, profile: SlicingProfile,
+    func export(path: String, profile: SlicingProfile, transform: TransformSession = .identity,
                 progress: (@Sendable (Double) -> Void)? = nil) async throws -> SliceOutput {
-        try await slicing.slice(path: path, profile: profile, progress: progress)
+        try await slicing.slice(path: path, profile: profile, transform: transform, progress: progress)
     }
 }
 
@@ -190,10 +193,11 @@ private func meshDiagnostics(_ mesh: UnsafeMutableRawPointer) -> [EngineDiagnost
     }
 }
 
-private func configure(_ config: ConfigHandle, profile: SlicingProfile,
+private func configure(_ config: ConfigHandle, profile: SlicingProfile, transform: TransformSession,
                       cancellation: UnsafeMutableRawPointer,
                       progress: (@Sendable (Double) -> Void)?) throws -> ProgressBox {
-    guard layer_cut_config_set_transform(config.raw, axisValue(profile.axis), profile.rotation, profile.scale) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid transform") }
+    let value = transform.validated()
+    guard layer_cut_config_set_transform_euler(config.raw, axisValue(value.cuttingAxis), value.rotateX, value.rotateY, value.rotateZ, value.scale) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid transform") }
     try configSetLayerHeight(config, mm: profile.layerHeight)
     guard layer_cut_config_set_cancellation(config.raw, cancellation) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Could not configure cancellation") }
     try configSetFormat(config, outputFormat(profile.outputFormat))

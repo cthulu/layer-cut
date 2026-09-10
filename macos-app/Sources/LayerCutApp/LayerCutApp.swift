@@ -38,6 +38,7 @@ private struct ContentView: View {
     private struct PreviewIdentity: Equatable {
         let path: String
         let profile: SlicingProfile
+        let transform: TransformSession
     }
 
     @EnvironmentObject private var appSettings: AppSettingsController
@@ -76,12 +77,13 @@ private struct ContentView: View {
     @State private var cameraControlsExpanded = false
     @State private var stackedCameraControlsExpanded = false
     @State private var stackedResetCameraID = 0
+    @State private var transform = TransformSession.identity
 
     private let meshService = MeshService()
 
     var body: some View {
         NavigationSplitView {
-            ParametersPanel(profileController: profiles, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status, onShowDiagnostics: { DiagnosticsWindowController.show(diagnostics) })
+             ParametersPanel(profileController: profiles, transform: $transform, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status, onShowDiagnostics: { DiagnosticsWindowController.show(diagnostics) })
                 .safeAreaInset(edge: .bottom) {
                     if let error = profiles.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(8) }
                 }
@@ -137,14 +139,22 @@ private struct ContentView: View {
              }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.windowBackground)
          }
           .task(id: snapshotTaskKey) { await refreshSnapshots() }
-          .onChange(of: profiles.activeProfile) { _, _ in
+           .onChange(of: profiles.activeProfile) { _, _ in
              layerOutput = nil
              layerOutputIdentity = nil
              previewError = nil
                 cancelPreview()
               cancelStackedPreview()
                if appSettings.settings.livePreview { startStackedPreview() }
-          }
+           }
+           .onChange(of: transform) { _, _ in
+               layerOutput = nil
+               layerOutputIdentity = nil
+               previewError = nil
+               cancelStackedPreview()
+               cancelPreview()
+               if appSettings.settings.livePreview { startStackedPreview() }
+           }
           .onChange(of: appSettings.settings.livePreview) { _, enabled in
               if enabled { startStackedPreview() } else { cancelStackedPreview() }
           }
@@ -185,11 +195,7 @@ private struct ContentView: View {
     }
 
     private func resetTransform() {
-        var profile = profiles.activeProfile
-        profile.axis = "+Z"
-        profile.rotation = 0
-        profile.scale = 1
-        profiles.activeProfile = profile
+        transform = .identity
     }
 
     private func openStlPanel() {
@@ -198,7 +204,8 @@ private struct ContentView: View {
          if panel.runModal() == .OK, let url = panel.url {
              modelName = url.lastPathComponent
              appSettings.rememberSTL(url)
-            modelPath = url.path
+             transform = .identity
+             modelPath = url.path
             snapshot = nil
             stackedSnapshot = nil
             stackedPreviewError = nil
@@ -232,7 +239,7 @@ private struct ContentView: View {
     private func startPreview() {
         guard let modelPath else { return }
         let profile = profiles.activeProfile
-        let identity = PreviewIdentity(path: modelPath, profile: profile)
+        let identity = PreviewIdentity(path: modelPath, profile: profile, transform: transform)
         guard layerOutputIdentity != identity else { return }
         previewTask?.cancel()
         let generation = UUID()
@@ -241,7 +248,7 @@ private struct ContentView: View {
         previewProgress = 0
         previewTask = Task {
             do {
-                let value = try await SlicingService().preview(path: modelPath, profile: profile, dpi: 96,
+                let value = try await SlicingService().preview(path: modelPath, profile: profile, transform: transform, dpi: 96,
                     progress: { value in Task { @MainActor in
                         guard generation == previewGeneration else { return }
                         previewProgress = value
@@ -279,7 +286,7 @@ private struct ContentView: View {
     private func startStackedPreview() {
         guard let modelPath else { return }
         let profile = profiles.activeProfile
-        let identity = PreviewIdentity(path: modelPath, profile: profile)
+        let identity = PreviewIdentity(path: modelPath, profile: profile, transform: transform)
         guard stackedPreviewIdentity != identity || stackedPreviewTask == nil else { return }
         stackedPreviewTask?.cancel()
         let generation = UUID()
@@ -290,7 +297,7 @@ private struct ContentView: View {
         stackedPreviewError = nil
         stackedPreviewTask = Task {
             do {
-                let value = try await meshService.stackedSnapshot(path: modelPath, profile: profile,
+                let value = try await meshService.stackedSnapshot(path: modelPath, profile: profile, transform: transform,
                     progress: { value in Task { @MainActor in
                         guard generation == stackedPreviewGeneration else { return }
                         stackedPreviewProgress = value
@@ -329,18 +336,19 @@ private struct ContentView: View {
     private var snapshotTaskKey: String {
         guard let modelPath else { return "none" }
         let profile = profiles.activeProfile
-        return "\(modelPath)|\(profile.axis)|\(profile.rotation)|\(profile.scale)"
+        return "model=\(modelPath)|profile=\(profile)|\(transform.cacheKey)"
     }
 
     @MainActor
     private func refreshSnapshots() async {
         guard let modelPath else { return }
-        let profile = profiles.activeProfile
+        let requestedTransform = transform
         do {
             async let metadata = meshService.load(path: modelPath)
-            async let transformed = meshService.snapshot(path: modelPath, axis: profile.axis, rotation: profile.rotation, scale: profile.scale)
-             let (meshMetadata, value) = try await (metadata, transformed)
-             normalizedHeight = Double(meshMetadata.bounds.max.z - meshMetadata.bounds.min.z)
+            async let transformed = meshService.snapshot(path: modelPath, transform: requestedTransform)
+             let (_, value) = try await (metadata, transformed)
+             guard self.modelPath == modelPath, self.transform == requestedTransform else { return }
+             normalizedHeight = Double(value.bounds.max.z - value.bounds.min.z)
              snapshot = value
             activeLayer = 0
             status = "Ready"
@@ -364,7 +372,7 @@ private struct ContentView: View {
         exportTask = Task {
             do {
                 let report = try await ExportCoordinator().run(path: modelPath, profile: profile,
-                    directory: SecurityScopedDirectory(url: outputURL), allowOverwrite: allowOverwrite,
+                    directory: SecurityScopedDirectory(url: outputURL), transform: transform, allowOverwrite: allowOverwrite,
                     progress: { value in Task { @MainActor in exportProgress = value } })
                 await MainActor.run {
                     exportReport = report

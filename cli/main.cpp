@@ -6,6 +6,7 @@
 #include "stacked_preview.h"
 #include "stl_writer.h"
 #include "cricut_page.h"
+#include "transform.h"
 
 #include <CLI/CLI.hpp>
 
@@ -14,6 +15,7 @@
 #include <iomanip>
 #include <iostream>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 #ifdef _WIN32
@@ -60,7 +62,8 @@ int main(int argc, char* argv[]) {
       "Conventions:\n"
       "  STL coordinates are interpreted as millimetres.\n"
       "  The input Z axis is sliced with horizontal XY planes.\n"
-      "  Slicing translates min-Z to 0; rotation is not performed.\n");
+      "  Transform order is scale * axis orientation * Rz * Ry * Rx * input.\n"
+      "  Slicing translates min-Z to 0.\n");
 
   std::string output_dir = "output";
   double layer_height = 0.2;
@@ -81,6 +84,8 @@ int main(int argc, char* argv[]) {
   double layer_number_font_size = 2.5;
   std::string stl_path;
   std::string stacked_stl_path;
+  std::string cutting_axis_name = "+Z";
+  double rotate_x = 0.0, rotate_y = 0.0, rotate_z = 0.0, transform_scale = 1.0;
 
   app.add_option("-o,--output-dir", output_dir,
                  "Output directory for generated layers (default: output)");
@@ -127,6 +132,21 @@ int main(int argc, char* argv[]) {
       ->check(CLI::Range(0.01, 100.0));
   app.add_option("--stacked-stl", stacked_stl_path,
                  "Optional watertight stacked-layer preview STL path");
+  app.add_option("--cutting-axis", cutting_axis_name,
+                 "Cutting axis: +X, -X, +Y, -Y, +Z, or -Z (default: +Z)")
+      ->check(CLI::IsMember({"+X", "-X", "+Y", "-Y", "+Z", "-Z"}));
+  app.add_option("--rotate-x", rotate_x,
+                 "Rotate around X in degrees (default: 0)")
+      ->check(CLI::Range(-180.0, 180.0));
+  app.add_option("--rotate-y", rotate_y,
+                 "Rotate around Y in degrees (default: 0)")
+      ->check(CLI::Range(-180.0, 180.0));
+  app.add_option("--rotate-z", rotate_z,
+                 "Rotate around Z in degrees (default: 0)")
+      ->check(CLI::Range(-180.0, 180.0));
+  app.add_option("--scale", transform_scale,
+                 "Uniform positive model scale (default: 1)")
+      ->check(CLI::Range(0.000001, 1000000.0));
   app.add_option("stl-file", stl_path, "Input STL file path (required)")
       ->required();
 
@@ -145,6 +165,15 @@ int main(int argc, char* argv[]) {
       (canvas_width != 0.0 && canvas_width <= 0.0) ||
       (canvas_height != 0.0 && canvas_height <= 0.0)) {
     std::cerr << "Error: canvas dimensions must both be positive or omitted.\n";
+    return 2;
+  }
+  if (!std::isfinite(rotate_x) || !std::isfinite(rotate_y) ||
+      !std::isfinite(rotate_z) || rotate_x < -180.0 || rotate_x > 180.0 ||
+      rotate_y < -180.0 || rotate_y > 180.0 || rotate_z < -180.0 ||
+      rotate_z > 180.0 || !std::isfinite(transform_scale) ||
+      transform_scale <= 0.0) {
+    std::cerr << "Error: transform angles must be finite in [-180, 180] and "
+                 "scale must be positive and finite.\n";
     return 2;
   }
   if (cricut_combined && format != "cricut-normal" && format != "cricut-large") {
@@ -174,7 +203,12 @@ int main(int argc, char* argv[]) {
               << " mesh diagnostic(s); continuing best-effort.\n";
   }
 
-  const auto sliced = layer_cut::slice_mesh(validation.mesh, {layer_height});
+  const std::array<std::string, 6> axis_names = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
+  const int cutting_axis = static_cast<int>(std::distance(
+      axis_names.begin(), std::find(axis_names.begin(), axis_names.end(), cutting_axis_name)));
+  const auto transformed = layer_cut::transform_mesh(validation.mesh,
+      {cutting_axis, rotate_x, rotate_y, rotate_z, transform_scale});
+  const auto sliced = layer_cut::slice_mesh(transformed, {layer_height});
   if (!sliced.valid()) {
     for (const std::string& error : sliced.errors) std::cerr << "Error: " << error << "\n";
     return 2;

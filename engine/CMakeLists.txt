@@ -10,6 +10,7 @@ add_library(layer_cut_engine STATIC
   src/stacked_preview.cpp
   src/cricut_page.cpp
   src/stl_loader.cpp
+  src/transform.cpp
   src/layer_cut.cpp
 )
 

@@ -97,9 +97,16 @@ feat: add STL binary parser
   and reproducible Release packaging with hardened runtime, signing, DMG, and
   optional notarization documentation.
 - Cricut integration Step 17 is implemented: optional combined-SVG layer numbers
-  are configured through the engine, C ABI, CLI, and macOS profiles, with
-  deterministic bounding-box placement including shapes smaller than the label.
+   are configured through the engine, C ABI, CLI, and macOS profiles, with
+   deterministic bounding-box placement including shapes smaller than the label.
+- Cricut compatibility learning: Cricut Design Space may ignore the current
+  combined-SVG layer naming and display every layer with the same name (for
+  example, `page_000_layers_000-021`). This is likely not fixable through SVG
+  naming alone; treat it as a known limitation.
 
 ## Updating This File
 
 Update this AGENTS.md after completing groups of steps to reflect current state.
+
+## Storing learnings
+Use LEARNINGS.md for learnings (information that should be preserved) and use it when planning

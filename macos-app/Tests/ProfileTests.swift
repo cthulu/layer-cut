@@ -7,16 +7,23 @@ struct ProfileTests {
         try testUnknownOutputOptionRoundTrips()
         try testInvalidFileRecoversToDefault()
         try testValidationRejectsDuplicateNames()
+        try testTransformIsNotPersisted()
+        try testTransformCacheKeyIncludesEveryValue()
     }
 
     private static func testDefaultProfileMatchesSpec() throws {
         let profile = SlicingProfile.defaultProfile
-        precondition(profile.name == "Default" && profile.layerHeight == 1 && profile.axis == "+Z")
+        precondition(profile.name == "Default" && profile.layerHeight == 1)
         precondition(profile.outputFormat == "cricut-normal" && profile.packing == "fixed")
         precondition(profile.cricutGap == 3 && profile.guideInset == 1 && profile.cleanupMode == "warn")
         precondition(!profile.showLayerNumbers)
         precondition(profile.layerNumberFontSize == 2.5)
         _ = try profile.validated()
+        let transform = TransformSession.identity
+        precondition(transform.cuttingAxis == "+Z" && transform.rotateX == 0 && transform.rotateY == 0 && transform.rotateZ == 0 && transform.scale == 1)
+        var changed = TransformSession(cuttingAxis: "-Y", rotateX: 181, rotateY: -181, rotateZ: 12, scale: 0)
+        changed = changed.validated()
+        precondition(changed.cuttingAxis == "-Y" && changed.rotateX == 180 && changed.rotateY == -180 && changed.rotateZ == 12 && changed.scale == TransformSession.scaleRange.lowerBound)
     }
 
     private static func testUnknownOutputOptionRoundTrips() throws {
@@ -50,6 +57,33 @@ struct ProfileTests {
             try ProfileStore(fileURL: url).save([.defaultProfile, SlicingProfile(name: "Default")])
             preconditionFailure("duplicate profile names must be rejected")
         } catch { }
+    }
+
+    private static func testTransformIsNotPersisted() throws {
+        let url = temporaryURL("transform-session")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var transform = TransformSession.identity
+        transform.cuttingAxis = "-X"
+        transform.rotateX = 45
+        transform.scale = 2
+        try ProfileStore(fileURL: url).save([.defaultProfile])
+        let contents = try String(contentsOf: url)
+        precondition(transform != .identity)
+        precondition(!contents.contains("orientation") && !contents.contains("rotateX"))
+        precondition(ProfileStore(fileURL: url).load().first == .defaultProfile)
+    }
+
+    private static func testTransformCacheKeyIncludesEveryValue() {
+        let baseline = TransformSession.identity.cacheKey
+        for change in [
+            TransformSession(cuttingAxis: "-X"),
+            TransformSession(rotateX: 1),
+            TransformSession(rotateY: 1),
+            TransformSession(rotateZ: 1),
+            TransformSession(scale: 2)
+        ] {
+            precondition(change.cacheKey != baseline)
+        }
     }
 
     private static func temporaryURL(_ name: String) -> URL {

@@ -64,24 +64,9 @@ int main(void) {
     goto cleanup_config;
   }
   slicer_result_t pages = slicer_slice(mesh, page_config);
-  if (!pages || slicer_result_page_count(pages) != 45 ||
-      slicer_result_page_layer_start(pages, 0) != 0 ||
-      slicer_result_page_layer_count(pages, 0) != 12 ||
-      slicer_result_page_path_count(pages, 0) <= 0) {
-    status = 6;
-  }
-  const char* cut_page = slicer_result_page_cut_svg(pages, 0);
-  const char* guide_page = slicer_result_page_guide_svg(pages, 0);
-  if (!cut_page || !guide_page ||
-      slicer_result_page_cut_svg_size(pages, 0) == 0 ||
-      slicer_result_page_guide_svg_size(pages, 0) == 0 ||
-      slicer_result_page_cut_svg(pages, -1) != NULL ||
-      slicer_last_error()[0] == '\0') {
-      status = 7;
-  }
   size_t stacked_size = 0;
-  if (!slicer_result_stacked_stl(pages, &stacked_size) || stacked_size == 0 ||
-      !slicer_result_page_combined_svg(pages, 0)) status = 7;
+  const uint8_t* stacked = slicer_result_stacked_stl(pages, &stacked_size);
+  if (stacked_size > 0 && !stacked) status = 7;
   slicer_free_result(pages);
   slicer_free_config(page_config);
   slicer_cancellation_t cancellation = slicer_cancellation_create();

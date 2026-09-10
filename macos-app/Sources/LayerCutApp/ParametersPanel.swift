@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ParametersPanel: View {
     @ObservedObject var profileController: ProfileController
+    @Binding var transform: TransformSession
     @State private var profileExpanded = true
     @State private var orientationExpanded = true
     @State private var slicingExpanded = true
@@ -23,7 +24,6 @@ struct ParametersPanel: View {
     let status: String
     let onShowDiagnostics: () -> Void
 
-    private let axes = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
     private let formats = [("svg", "SVG"), ("png", "PNG"), ("stacked-svg", "Stacked SVG"), ("stacked-stl", "Stacked STL")]
 
     var body: some View {
@@ -53,10 +53,14 @@ struct ParametersPanel: View {
                     }
                 }
             }
-            DisclosureGroup("Model Orientation", isExpanded: $orientationExpanded) {
-                Picker("Rotation axis", selection: profileBinding(\.axis)) { ForEach(axes, id: \.self, content: Text.init) }
-                sliderRow("Fine rotation (°)", value: profileBinding(\.rotation), range: -180...180)
-                sliderRow("Scale", value: profileBinding(\.scale), range: 0.1...10)
+            DisclosureGroup("Transform", isExpanded: $orientationExpanded) {
+                Picker("Cutting axis", selection: $transform.cuttingAxis) {
+                    ForEach(TransformSession.axes, id: \.self, content: Text.init)
+                }
+                sliderRow("Rotate X (deg)", value: transformBinding(\.rotateX, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                sliderRow("Rotate Y (deg)", value: transformBinding(\.rotateY, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                sliderRow("Rotate Z (deg)", value: transformBinding(\.rotateZ, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                sliderRow("Scale", value: transformBinding(\.scale, range: TransformSession.scaleRange), range: TransformSession.scaleRange)
             }
             DisclosureGroup("Slicing", isExpanded: $slicingExpanded) {
                 sliderRow("Layer height (mm)", value: profileBinding(\.layerHeight), range: 0.1...10)
@@ -114,11 +118,21 @@ struct ParametersPanel: View {
     }
 
     private func profileBinding<T>(_ keyPath: WritableKeyPath<SlicingProfile, T>) -> Binding<T> { Binding(get: { profileController.activeProfile[keyPath: keyPath] }, set: { var profile = profileController.activeProfile; profile[keyPath: keyPath] = $0; profileController.activeProfile = profile }) }
+    private func transformBinding(_ keyPath: WritableKeyPath<TransformSession, Double>, range: ClosedRange<Double>) -> Binding<Double> {
+        Binding(get: { transform[keyPath: keyPath] }, set: { value in
+            transform[keyPath: keyPath] = min(max(value.isFinite ? value : range.lowerBound, range.lowerBound), range.upperBound)
+        })
+    }
     private var formatBinding: Binding<String> { Binding(get: { selectedFormat }, set: { value in var profile = profileController.activeProfile; if value == "stacked-svg" { profile.outputFormat = profile.outputFormat == "cricut-large" ? "cricut-large" : "cricut-normal"; profile.combinedCricut = true } else { profile.outputFormat = value; profile.combinedCricut = false }; profileController.activeProfile = profile }) }
     private var selectedFormat: String { ["cricut-normal", "cricut-large", "cricut-combined"].contains(profileController.activeProfile.outputFormat) ? "stacked-svg" : profileController.activeProfile.outputFormat }
     private var cricutSizeBinding: Binding<String> { Binding(get: { profileController.activeProfile.outputFormat == "cricut-large" ? "cricut-large" : "cricut-normal" }, set: { value in var profile = profileController.activeProfile; profile.outputFormat = value; profile.combinedCricut = true; profileController.activeProfile = profile }) }
     private func profileBinding(_ keyPath: WritableKeyPath<SlicingProfile, Double?>, default defaultValue: Double) -> Binding<Double> { Binding(get: { profileController.activeProfile[keyPath: keyPath] ?? defaultValue }, set: { var profile = profileController.activeProfile; profile[keyPath: keyPath] = $0 > 0 ? $0 : nil; profileController.activeProfile = profile }) }
-    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View { NumericField(title, value: profileBinding(keyPath)) }
+    private func threshold(_ title: String, keyPath: WritableKeyPath<SlicingProfile, Double>) -> some View {
+        LabeledContent(title) {
+            NumericField(value: profileBinding(keyPath))
+                .frame(width: 100)
+        }
+    }
     private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack { Text(title); Spacer(); NumericField(value: value).frame(width: 100) }

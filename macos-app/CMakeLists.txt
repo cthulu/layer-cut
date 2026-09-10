@@ -14,6 +14,7 @@ add_executable(LayerCutApp
   Sources/LayerCutApp/ExportWorkflow.swift
   Sources/LayerCutApp/ViewportView.swift
   Sources/LayerCutApp/Profile.swift
+  Sources/LayerCutApp/TransformSession.swift
   Sources/LayerCutApp/ParametersPanel.swift
   Sources/LayerCutApp/LayerPreview.swift
   Sources/LayerCutApp/AppSettings.swift
@@ -67,6 +68,7 @@ install(TARGETS LayerCutApp
 if(BUILD_TESTING)
   add_executable(LayerCutProfileTests
     Sources/LayerCutApp/Profile.swift
+    Sources/LayerCutApp/TransformSession.swift
     Tests/ProfileTests.swift
   )
   target_link_libraries(LayerCutProfileTests PRIVATE
@@ -93,6 +95,7 @@ if(BUILD_TESTING)
     Sources/LayerCutApp/EngineBridge.swift
     Sources/LayerCutApp/EngineServices.swift
     Sources/LayerCutApp/Profile.swift
+    Sources/LayerCutApp/TransformSession.swift
     Sources/LayerCutApp/ExportWorkflow.swift
     Tests/ExportWorkflowTests.swift
   )

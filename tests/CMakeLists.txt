@@ -117,4 +117,10 @@ if(TARGET layer-cut)
       -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli-svg-output
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_integration.cmake
   )
+  add_test(NAME layer_cut_cli_transform_integration_test
+    COMMAND ${CMAKE_COMMAND}
+      -DCLI=$<TARGET_FILE:layer-cut>
+      -DINPUT=${PROJECT_SOURCE_DIR}/testfiles/fox.stl
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_transform_integration.cmake
+  )
 endif()

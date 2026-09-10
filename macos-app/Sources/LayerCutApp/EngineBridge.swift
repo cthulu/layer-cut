@@ -43,8 +43,8 @@ func layer_cut_config_set_cleanup_thresholds(_ config: UnsafeMutableRawPointer, 
 
 typealias LayerCutProgressCallback = @convention(c) (UnsafeMutableRawPointer?, Int32, Int32, CDouble) -> Void
 
-@_silgen_name("slicer_config_set_transform")
-func layer_cut_config_set_transform(_ config: UnsafeMutableRawPointer, _ axis: Int32, _ rotation: CDouble, _ scale: CDouble) -> Int32
+@_silgen_name("slicer_config_set_transform_euler")
+func layer_cut_config_set_transform_euler(_ config: UnsafeMutableRawPointer, _ axis: Int32, _ rotateX: CDouble, _ rotateY: CDouble, _ rotateZ: CDouble, _ scale: CDouble) -> Int32
 
 @_silgen_name("slicer_config_set_cancellation")
 func layer_cut_config_set_cancellation(_ config: UnsafeMutableRawPointer, _ cancellation: UnsafeMutableRawPointer?) -> Int32
@@ -127,8 +127,8 @@ func layer_cut_mesh_diagnostic(_ mesh: UnsafeMutableRawPointer, _ index: Int32) 
 @_silgen_name("slicer_mesh_diagnostic_severity")
 func layer_cut_mesh_diagnostic_severity(_ mesh: UnsafeMutableRawPointer, _ index: Int32) -> Int32
 
-@_silgen_name("slicer_mesh_snapshot")
-func layer_cut_mesh_snapshot(_ mesh: UnsafeMutableRawPointer, _ axis: Int32, _ rotation: CDouble, _ scale: CDouble, _ snapshot: UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Int32
+@_silgen_name("slicer_mesh_snapshot_euler")
+func layer_cut_mesh_snapshot_euler(_ mesh: UnsafeMutableRawPointer, _ axis: Int32, _ rotateX: CDouble, _ rotateY: CDouble, _ rotateZ: CDouble, _ scale: CDouble, _ snapshot: UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Int32
 
 @_silgen_name("slicer_snapshot_vertices")
 func layer_cut_snapshot_vertices(_ snapshot: UnsafeMutableRawPointer, _ count: UnsafeMutablePointer<Int>) -> UnsafePointer<Float>?

@@ -84,9 +84,10 @@ final class ExportCoordinator: Sendable {
     private let slicing = ExportService()
 
     func run(path: String, profile: SlicingProfile, directory: SecurityScopedDirectory,
+             transform: TransformSession = .identity,
              allowOverwrite: Bool = false,
              progress: (@Sendable (Double) -> Void)? = nil) async throws -> ExportReport {
-        let output = try await slicing.export(path: path, profile: profile, progress: progress)
+        let output = try await slicing.export(path: path, profile: profile, transform: transform, progress: progress)
         let artifacts = try artifacts(for: output, profile: profile)
         let existing = artifacts.filter { FileManager.default.fileExists(atPath: directory.url.appendingPathComponent($0.path).path) }
         guard allowOverwrite || existing.isEmpty else {

@@ -9,6 +9,7 @@
 #include "stacked_preview.h"
 #include "stl_writer.h"
 #include "svg_writer.h"
+#include "transform.h"
 
 #include <cmath>
 #include <atomic>
@@ -41,7 +42,9 @@ struct ConfigHandle {
   slicer_progress_callback_t progress_callback = nullptr;
   void* progress_context = nullptr;
   int axis = 4;
-  double rotation_degrees = 0.0;
+  double rotate_x_degrees = 0.0;
+  double rotate_y_degrees = 0.0;
+  double rotate_z_degrees = 0.0;
   double scale = 1.0;
   std::shared_ptr<std::atomic<bool>> cancellation;
 };
@@ -80,56 +83,6 @@ struct CancellationHandle {
 template <typename T> T* handle(void* value) { return static_cast<T*>(value); }
 void fail(std::string message) { last_error = std::move(message); }
 bool valid_handle(const void* value) { return value != nullptr; }
-
-layer_cut::Mesh transformed(const layer_cut::Mesh& source, int axis,
-                            double rotation_degrees, double scale) {
-  layer_cut::Mesh output;
-  const double radians = rotation_degrees * 3.14159265358979323846 / 180.0;
-  const double cosine = std::cos(radians), sine = std::sin(radians);
-  auto orient = [axis](const layer_cut::Vec3& p) {
-    switch (axis) {
-      case 0: return layer_cut::Vec3{p.z, p.y, -p.x};
-      case 1: return layer_cut::Vec3{-p.z, p.y, p.x};
-      case 2: return layer_cut::Vec3{p.x, p.z, -p.y};
-      case 3: return layer_cut::Vec3{p.x, -p.z, p.y};
-      case 5: return layer_cut::Vec3{p.x, -p.y, -p.z};
-      default: return p;
-    }
-  };
-  auto apply = [&](const layer_cut::Vec3& value) {
-    const auto p = orient(value);
-    return layer_cut::Vec3{
-        static_cast<float>((p.x * cosine - p.y * sine) * scale),
-        static_cast<float>((p.x * sine + p.y * cosine) * scale),
-        static_cast<float>(p.z * scale)};
-  };
-  bool first = true;
-  for (const auto& triangle : source.triangles) {
-    const layer_cut::Triangle copy{triangle.normal, apply(triangle.a),
-                                   apply(triangle.b), apply(triangle.c)};
-    output.triangles.push_back(copy);
-    for (const auto& point : {copy.a, copy.b, copy.c}) {
-      if (first) { output.min = output.max = point; first = false; }
-      else {
-        output.min.x = std::min(output.min.x, point.x);
-        output.min.y = std::min(output.min.y, point.y);
-        output.min.z = std::min(output.min.z, point.z);
-        output.max.x = std::max(output.max.x, point.x);
-        output.max.y = std::max(output.max.y, point.y);
-        output.max.z = std::max(output.max.z, point.z);
-      }
-    }
-  }
-  if (!first) {
-    const float offset = output.min.z;
-    for (auto& triangle : output.triangles) {
-      for (auto* point : {&triangle.a, &triangle.b, &triangle.c}) point->z -= offset;
-    }
-    output.min.z = 0.0f;
-    output.max.z -= offset;
-  }
-  return output;
-}
 
 bool cancelled(const ConfigHandle& config) {
   return config.cancellation && config.cancellation->load();
@@ -252,15 +205,28 @@ int slicer_config_set_progress_callback(slicer_config_t config,
 
 int slicer_config_set_transform(slicer_config_t config, int axis,
                                 double rotation_degrees, double scale) {
+  return slicer_config_set_transform_euler(config, axis, 0.0, 0.0,
+                                           rotation_degrees, scale);
+}
+
+int slicer_config_set_transform_euler(slicer_config_t config, int axis,
+                                      double rotate_x_degrees,
+                                      double rotate_y_degrees,
+                                      double rotate_z_degrees, double scale) {
   if (!valid_handle(config) || axis < 0 || axis > 5 ||
-      !std::isfinite(rotation_degrees) || rotation_degrees < -180.0 ||
-      rotation_degrees > 180.0 || !std::isfinite(scale) || scale <= 0.0) {
+      !std::isfinite(rotate_x_degrees) || rotate_x_degrees < -180.0 ||
+      rotate_x_degrees > 180.0 || !std::isfinite(rotate_y_degrees) ||
+      rotate_y_degrees < -180.0 || rotate_y_degrees > 180.0 ||
+      !std::isfinite(rotate_z_degrees) || rotate_z_degrees < -180.0 ||
+      rotate_z_degrees > 180.0 || !std::isfinite(scale) || scale <= 0.0) {
     fail("Transform values are invalid");
     return 0;
   }
   auto* value = handle<ConfigHandle>(config);
   value->axis = axis;
-  value->rotation_degrees = rotation_degrees;
+  value->rotate_x_degrees = rotate_x_degrees;
+  value->rotate_y_degrees = rotate_y_degrees;
+  value->rotate_z_degrees = rotate_z_degrees;
   value->scale = scale;
   return 1;
 }
@@ -296,9 +262,10 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
   auto* mesh_handle = handle<MeshHandle>(mesh);
   auto* config_handle = handle<ConfigHandle>(config);
   if (cancelled(*config_handle)) { fail("Slicing cancelled"); return nullptr; }
-  const auto prepared_mesh = transformed(mesh_handle->mesh, config_handle->axis,
-                                         config_handle->rotation_degrees,
-                                         config_handle->scale);
+  const auto prepared_mesh = layer_cut::transform_mesh(
+      mesh_handle->mesh, {config_handle->axis, config_handle->rotate_x_degrees,
+                          config_handle->rotate_y_degrees,
+                          config_handle->rotate_z_degrees, config_handle->scale});
   const auto sliced = layer_cut::slice_mesh(prepared_mesh, {config_handle->layer_height});
   if (!sliced.valid()) { fail(sliced.errors.front()); return nullptr; }
   const int total_layers = static_cast<int>(sliced.layers.size());
@@ -647,13 +614,27 @@ int slicer_mesh_diagnostic_severity(slicer_mesh_t mesh, int index) {
 
 int slicer_mesh_snapshot(slicer_mesh_t mesh, int axis, double rotation_degrees,
                          double scale, slicer_snapshot_t* snapshot) {
+  return slicer_mesh_snapshot_euler(mesh, axis, 0.0, 0.0, rotation_degrees,
+                                    scale, snapshot);
+}
+
+int slicer_mesh_snapshot_euler(slicer_mesh_t mesh, int axis,
+                               double rotate_x_degrees,
+                               double rotate_y_degrees,
+                               double rotate_z_degrees, double scale,
+                               slicer_snapshot_t* snapshot) {
   if (snapshot) *snapshot = nullptr;
   if (!valid_handle(mesh) || !snapshot || axis < 0 || axis > 5 ||
-      !std::isfinite(rotation_degrees) || !std::isfinite(scale) || scale <= 0.0) {
+       !std::isfinite(rotate_x_degrees) || rotate_x_degrees < -180.0 ||
+       rotate_x_degrees > 180.0 || !std::isfinite(rotate_y_degrees) ||
+       rotate_y_degrees < -180.0 || rotate_y_degrees > 180.0 ||
+       !std::isfinite(rotate_z_degrees) || rotate_z_degrees < -180.0 ||
+       rotate_z_degrees > 180.0 || !std::isfinite(scale) || scale <= 0.0) {
     fail("Invalid mesh snapshot request"); return 0;
   }
-  const auto value = transformed(handle<MeshHandle>(mesh)->mesh, axis,
-                                 rotation_degrees, scale);
+  const auto value = layer_cut::transform_mesh(
+      handle<MeshHandle>(mesh)->mesh,
+      {axis, rotate_x_degrees, rotate_y_degrees, rotate_z_degrees, scale});
   auto* output = new SnapshotHandle;
   output->vertices.reserve(value.triangles.size() * 9);
   output->indices.reserve(value.triangles.size() * 3);

@@ -102,25 +102,6 @@ Bounds pen_outline_bounds(const std::vector<Contour>& contours) {
   return bounds_of(contours);
 }
 
-std::pair<double, double> pen_bounds_for_next(const SliceLayer* layer,
-                                              double usable_width,
-                                              double usable_height) {
-  if (layer == nullptr) return {0.0, 0.0};
-  const Bounds source = bounds_of(layer->contours);
-  for (int orientation : {0, 90, 180, 270}) {
-    Bounds normalized;
-    const auto rotated = rotate_and_normalize(layer->contours, source, orientation,
-                                              &normalized);
-    const Bounds pen_bounds = pen_outline_bounds(rotated);
-    const double width = pen_bounds.max_x - pen_bounds.min_x;
-    const double height = pen_bounds.max_y - pen_bounds.min_y;
-    if (width <= usable_width + 1e-9 && height <= usable_height + 1e-9) {
-      return {width, height};
-    }
-  }
-  return {0.0, 0.0};
-}
-
 std::size_t path_count(const std::vector<Contour>& contours) {
   std::size_t count = 0;
   for (const Contour& contour : contours) {
@@ -246,13 +227,6 @@ CricutPageResult build_cricut_pages(
          ++layer_position) {
       const SliceLayer* layer_ptr = ordered_layers[layer_position];
       const SliceLayer& layer = *layer_ptr;
-      const SliceLayer* next_layer = layer_position + 1 < ordered_layers.size()
-                                         ? ordered_layers[layer_position + 1]
-                                         : nullptr;
-      // A guide for the next layer is drawn at this layer's placement. Reserve
-      // its complete pen outline here, including all disconnected contours.
-      const auto next_pen_bounds = pen_bounds_for_next(
-          next_layer, usable_width, usable_height);
       const Bounds source = bounds_of(layer.contours);
       if (!source.set) continue;
       struct Candidate {
@@ -277,8 +251,6 @@ CricutPageResult build_cricut_pages(
                                         pen_bounds.max_x - pen_bounds.min_x);
             normalized.max_y = std::max(normalized.max_y,
                                         pen_bounds.max_y - pen_bounds.min_y);
-            normalized.max_x = std::max(normalized.max_x, next_pen_bounds.first);
-            normalized.max_y = std::max(normalized.max_y, next_pen_bounds.second);
             const double x = pages[p].shelves[shelf].next_x;
             const double y = pages[p].shelves[shelf].y;
             if (x + normalized.max_x > usable_width + 1e-9 ||
@@ -297,8 +269,6 @@ CricutPageResult build_cricut_pages(
                                       pen_bounds.max_x - pen_bounds.min_x);
           normalized.max_y = std::max(normalized.max_y,
                                       pen_bounds.max_y - pen_bounds.min_y);
-          normalized.max_x = std::max(normalized.max_x, next_pen_bounds.first);
-          normalized.max_y = std::max(normalized.max_y, next_pen_bounds.second);
           const double y = pages[p].shelves.empty()
                                ? 0.0
                                : pages[p].shelves.back().y +
@@ -320,8 +290,6 @@ CricutPageResult build_cricut_pages(
                                     pen_bounds.max_x - pen_bounds.min_x);
         normalized.max_y = std::max(normalized.max_y,
                                     pen_bounds.max_y - pen_bounds.min_y);
-        normalized.max_x = std::max(normalized.max_x, next_pen_bounds.first);
-        normalized.max_y = std::max(normalized.max_y, next_pen_bounds.second);
         if (normalized.max_x <= usable_width + 1e-9 &&
             normalized.max_y <= usable_height + 1e-9) {
           candidates.push_back({pages.size(), 0, 0.0, 0.0, normalized.max_x,
