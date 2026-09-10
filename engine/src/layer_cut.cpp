@@ -392,7 +392,12 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
     }
     const auto stacked = layer_cut::make_stacked_preview(prepared_layers,
                                                          config_handle->layer_height);
-    if (stacked.ok()) result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
+    if (stacked.ok()) {
+      result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
+    } else if (!stacked.error.empty()) {
+      result->diagnostics.push_back("Stacked preview: " + stacked.error);
+      result->diagnostic_severity.push_back(0);
+    }
     return result;
 #endif
   }
@@ -439,7 +444,12 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
   }
   const auto stacked = layer_cut::make_stacked_preview(sliced.layers,
                                                        config_handle->layer_height);
-  if (stacked.ok()) result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
+  if (stacked.ok()) {
+    result->stacked_stl = layer_cut::make_binary_stl(stacked.triangles);
+  } else if (!stacked.error.empty()) {
+    result->diagnostics.push_back("Stacked preview: " + stacked.error);
+    result->diagnostic_severity.push_back(0);
+  }
   return result;
 }
 
