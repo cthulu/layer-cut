@@ -10,6 +10,7 @@ namespace layer_cut {
 namespace {
 
 constexpr double kEpsilon = 1e-9;
+constexpr double kCollinearEpsilon = 1e-7;
 
 double cross(const Vec2& a, const Vec2& b, const Vec2& c) {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -87,6 +88,23 @@ void remove_duplicate_points(std::vector<Vec2>& points) {
   points = std::move(filtered);
 }
 
+void remove_collinear_points(std::vector<Vec2>& points) {
+  if (points.size() < 3) return;
+  bool removed = true;
+  while (removed && points.size() >= 3) {
+    removed = false;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+      const std::size_t previous = (i + points.size() - 1) % points.size();
+      const std::size_t next = (i + 1) % points.size();
+      if (std::abs(cross(points[previous], points[i], points[next])) <= kCollinearEpsilon) {
+        points.erase(points.begin() + static_cast<std::ptrdiff_t>(i));
+        removed = true;
+        break;
+      }
+    }
+  }
+}
+
 bool bridge_is_clear(const std::vector<Vec2>& outer,
                      const std::vector<Vec2>& hole, std::size_t outer_index,
                      std::size_t hole_index) {
@@ -159,6 +177,7 @@ bool bridge_hole(std::vector<Vec2>& polygon, const std::vector<Vec2>& hole,
     merged.push_back(polygon[i]);
   }
   remove_duplicate_points(merged);
+  remove_collinear_points(merged);
   polygon = std::move(merged);
   return true;
 }
@@ -177,6 +196,7 @@ bool triangulate_simple(std::vector<Vec2> polygon,
                         std::vector<std::array<Vec2, 3>>& triangles,
                         std::string* error) {
   remove_duplicate_points(polygon);
+  remove_collinear_points(polygon);
   if (polygon.size() < 3 || std::abs(area(polygon)) <= kEpsilon) return true;
   if (area(polygon) < 0.0) std::reverse(polygon.begin(), polygon.end());
 
@@ -239,7 +259,10 @@ bool triangulate_contours(const std::vector<Contour>& contours,
     for (const std::size_t hole_index : holes) {
       if (!bridge_hole(polygon, contours[hole_index].points, error)) return false;
     }
-    if (!triangulate_simple(std::move(polygon), triangles, error)) return false;
+    if (!triangulate_simple(std::move(polygon), triangles, error)) {
+      if (error) *error += " (outer contour " + std::to_string(outer_index) + ")";
+      return false;
+    }
   }
   return true;
 }
