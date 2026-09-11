@@ -6,7 +6,7 @@ Priority: P0
 
 Define the visible composition of the Layer Cut macOS window after the UI cleanup.
 The specification is intentionally separate from the implementation steps for the
-parameter controls, layer thumbnails, and RealityKit renderer: those components
+parameter controls, inline SVG layer preview, and RealityKit renderer: those components
 must compose into one predictable workflow.
 
 ## Window Composition
@@ -18,8 +18,9 @@ The primary window uses a three-region layout:
    status/error feedback.
 2. A main preview workspace containing the original-model viewport and the
    optional stacked-layer viewport as two vertically stacked panes.
-3. A modal/on-demand layer preview sheet containing the generated 2D layer
-   thumbnails and metadata. It is not permanently shown in the main workspace.
+3. An optional layer-preview viewer inside the sidebar's `Preview` section,
+   containing one generated SVG layer and its next-layer guide. It never opens
+   a modal sheet or adds a workspace pane.
 
 The sidebar remains usable while a preview or export is running. Long-running
 operations show progress and provide cancellation where the service supports it.
@@ -71,26 +72,29 @@ export completion and errors remain in the sidebar/status region.
 
 ## Layer Preview On Demand
 
-The 2D layer preview is an explicit, on-demand surface:
+The 2D layer preview is an explicit, inline sidebar surface:
 
-- The sidebar exposes `Preview layers…` (or an equivalent clearly labelled
-  action) after an STL is loaded.
-- Opening it presents a sheet with a lazy scrollable grid/list of copied PNG
-  previews, layer index, Z height, empty/warning state, page membership, and
-  output format where relevant.
-- The sheet has clear loading, error, empty, zoom, selection, and dismissal
-  states. Selecting a thumbnail updates the active layer and the original 3D
-  pane; it does not replace the stacked 3D pane.
-- Opening the sheet may trigger slicing only when the current model/profile
-  result is not cached. Dismissing it cancels an in-flight request when safe.
-- Layer PNG generation is not required merely to show the main 3D workspace;
-  the user can inspect the model and stacked mesh without opening the sheet.
+- The sidebar exposes a `Layer preview` toggle, off by default.
+- Enabling it triggers one complete SVG layer generation and shows determinate
+  approximate progress plus a spinner; disabling it cancels/clears the work.
+- The section shows a synchronized slider and numeric layer control above a
+  bounded, full-width SVG viewer.
+- The preview uses raw model coordinates, not Cricut page packing.
+- The guide always comes from the immediate numeric next layer; an empty next
+  layer produces no guide.
+- The selected layer updates the original 3D pane but does not replace the
+  stacked 3D pane.
+- Layer-preview generation is not required merely to show the main 3D
+  workspace. The user can inspect both 3D panes with the toggle off.
+- All slicing-affecting model, profile, and transform changes reset the selected
+  layer to 0 and regenerate only when the toggle is enabled.
 
 ## State and Accessibility Requirements
 
 The UI must make these states distinguishable: no model loaded, model loaded but
 not yet sliced, stacked preview loading, stacked preview unavailable/failed,
-layer preview loading/ready/failed, export running, and export completed/failed.
+layer preview disabled/loading/ready/failed, export running, and export
+completed/failed.
 Use text labels in addition to color or icons. Buttons and panes need accessible
 labels that describe their action and preview role.
 
@@ -98,6 +102,7 @@ labels that describe their action and preview role.
 
 - `14-file-import-ui.md` defines import and model metadata.
 - `15-parameters-panel.md` defines profile and output controls.
-- `17-layer-preview.md` defines generated layer data and thumbnail behavior.
+- `17-layer-preview.md` defines inline layer SVG generation, guide geometry, and
+  layer selection behavior.
 - `18-3d-viewport.md` defines the RealityKit and mesh boundary.
 - `19-export-workflow.md` defines export states and output semantics.
