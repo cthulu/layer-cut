@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-VERSION=${LAYER_CUT_VERSION:-0.2.0}
+VERSION=${LAYER_CUT_VERSION:-0.2.1}
 ARCHS=${MACOS_ARCHS:-arm64}
 # Accept the conventional comma-separated environment value, but pass the
 # format expected by each build tool.

@@ -57,24 +57,41 @@ struct ParametersPanel: View {
                 Picker("Cutting axis", selection: $transform.cuttingAxis) {
                     ForEach(TransformSession.axes, id: \.self, content: Text.init)
                 }
+                .help("The orientation axis along which the model will be sliced.")
                 sliderRow("Rotate X (deg)", value: transformBinding(\.rotateX, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                    .help("Rotation around the X-axis in degrees.")
                 sliderRow("Rotate Y (deg)", value: transformBinding(\.rotateY, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                    .help("Rotation around the Y-axis in degrees.")
                 sliderRow("Rotate Z (deg)", value: transformBinding(\.rotateZ, range: TransformSession.angleRange), range: TransformSession.angleRange)
+                    .help("Rotation around the Z-axis in degrees.")
                 sliderRow("Scale", value: transformBinding(\.scale, range: TransformSession.scaleRange), range: TransformSession.scaleRange)
+                    .help("Model scale factor.")
             }
             DisclosureGroup("Slicing", isExpanded: $slicingExpanded) {
                 sliderRow("Layer height (mm)", value: profileBinding(\.layerHeight), range: 0.1...10)
+                    .help("The vertical distance (thickness) of each 3D model slice.")
                 LabeledContent("Estimated layers", value: normalizedHeight > 0 ? "\(Int(ceil(normalizedHeight / profileController.activeProfile.layerHeight)))" : "Load a model")
+                    .help("Total slices expected based on model height and slice thickness.")
             }
             DisclosureGroup("Cleanup", isExpanded: $cleanupExpanded) {
                 Picker("Mode", selection: profileBinding(\.cleanupMode)) { Text("Preserve").tag("preserve"); Text("Warn").tag("warn"); Text("Apply").tag("apply") }
-                threshold("Feature width (mm)", keyPath: \.featureWidth); threshold("Island area (mm²)", keyPath: \.islandArea); threshold("Hole width (mm)", keyPath: \.holeWidth); threshold("Bridge width (mm)", keyPath: \.bridgeWidth)
+                    .help("Cleanup strategy: 'Preserve' keeps all geometry, 'Warn' flags thin areas, 'Apply' automatically removes features smaller than thresholds.")
+                threshold("Feature width (mm)", keyPath: \.featureWidth)
+                    .help("Minimum width for features to be kept in the final slice.")
+                threshold("Island area (mm²)", keyPath: \.islandArea)
+                    .help("Minimum area for isolated islands to be kept.")
+                threshold("Hole width (mm)", keyPath: \.holeWidth)
+                    .help("Minimum width for holes to be kept.")
+                threshold("Bridge width (mm)", keyPath: \.bridgeWidth)
+                    .help("Minimum width for structural bridges to be kept.")
             }
             DisclosureGroup("Output", isExpanded: $outputExpanded) {
                 Picker("Format", selection: formatBinding) {
                     ForEach(formats, id: \.0) { Text($0.1).tag($0.0) }
                 }
+                .help("The file format for exported layers.")
                 Stepper("DPI: \(profileController.activeProfile.outputDPI)", value: profileBinding(\.outputDPI), in: 1...2400)
+                    .help("Dots Per Inch: resolution for SVG/PNG export.")
                 if selectedFormat == "stacked-svg" {
                     Picker("Cricut size", selection: cricutSizeBinding) {
                         Text("Cricut Normal").tag("cricut-normal")
@@ -103,14 +120,24 @@ struct ParametersPanel: View {
             }
             DisclosureGroup("Cricut", isExpanded: $cricutExpanded) {
                 Picker("Packing", selection: profileBinding(\.packing)) { Text("Fixed").tag("fixed"); Text("Tight").tag("tight") }
+                    .help("Layout strategy: 'Fixed' aligns tiles in a regular grid, 'Tight' packs them more closely to save material.")
                 LabeledContent("Tile gap (mm)") {
                     NumericField("Gap (mm)", value: profileBinding(\.cricutGap))
+                        .help("Spacing between individual tiles on the cutting mat.")
+                        .frame(width: 100)
                 }
                 LabeledContent("Guide inset (mm)") {
                     NumericField("Guide inset (mm)", value: profileBinding(\.guideInset))
+                        .help("Margin to shrink the alignment guide, ensuring it's hidden under the physical layer.")
+                        .frame(width: 100)
                 }
                 Toggle("Show layer numbers in combined SVG", isOn: profileBinding(\.showLayerNumbers))
-                TextField("Number font size (mm)", value: profileBinding(\.layerNumberFontSize), format: numberFormat)
+                    .help("Include layer labels in the guide SVG for easier assembly.")
+                LabeledContent("Number font size (mm)") {
+                    NumericField("Number font size (mm)", value: profileBinding(\.layerNumberFontSize))
+                        .help("Font size for layer identification numbers.")
+                        .frame(width: 100)
+                }
                 LabeledContent("Page estimate", value: profileController.activeProfile.outputFormat.contains("cricut") ? "Calculated on preview" : "Not applicable")
             }
         }
