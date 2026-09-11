@@ -1,6 +1,7 @@
 #include "layer_cut.h"
 
 #include <stddef.h>
+#include <string.h>
 
 typedef struct {
   int calls;
@@ -33,7 +34,8 @@ int main(void) {
   slicer_config_t config = slicer_config_create();
   if (!config || !slicer_config_set_layer_height(config, 0.2)) { status = 2; goto cleanup_mesh; }
   if (!slicer_config_set_cleanup_mode(config, 1) ||
-      !slicer_config_set_cleanup_thresholds(config, 1.0, 0.0, 0.0, 0.0)) {
+      !slicer_config_set_cleanup_thresholds(config, 1.0, 0.0, 0.0, 0.0) ||
+      !slicer_config_set_layer_preview(config, 1)) {
     status = 2; goto cleanup_config;
   }
   if (!slicer_config_set_transform(config, 4, 0.0, 1.0)) {
@@ -48,8 +50,10 @@ int main(void) {
   if (progress.calls != 534 || progress.last_layer != 533 ||
       progress.total_layers != 533 || progress.fraction != 1.0) status = 3;
   const char* svg = slicer_result_layer_svg(result, 0);
-  if (!svg || svg[0] == '\0' || slicer_result_layer_svg(result, -1) != NULL ||
-      slicer_last_error()[0] == '\0') status = 4;
+  const char* preview = slicer_result_layer_preview_svg(result, 0);
+  if (!svg || svg[0] == '\0' || !preview || !strstr(preview, "cut-layer") ||
+      slicer_result_layer_svg(result, -1) != NULL ||
+       slicer_last_error()[0] == '\0') status = 4;
   slicer_free_result(result);
 
   slicer_config_t page_config = slicer_config_create();

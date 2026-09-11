@@ -1,111 +1,70 @@
 import SwiftUI
 import WebKit
 
-struct LayerPreviewSheet: View {
+struct LayerPreviewInline: View {
     let output: SliceOutput?
-    let task: Bool
+    @Binding var selection: Int
+    let layerCount: Int
+    let isGenerating: Bool
     let progress: Double
     let error: String?
-    @Binding var selection: Int?
-    @Binding var zoom: Double
-    let onCancel: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Layer previews").font(.title2.weight(.semibold))
-                Spacer()
-                Button("Close", action: onCancel)
+                Text("Layer")
+                NumericField("Layer number", value: layerNumber)
+                    .frame(width: 74)
+                Text("of \(max(layerCount, 0))").foregroundStyle(.secondary)
             }
-            if task {
-                ProgressView(value: progress) { Text("Generating SVG layer previews…") }
-                    .padding(.vertical)
-            } else if let error {
-                ContentUnavailableView("Preview unavailable", systemImage: "exclamationmark.triangle", description: Text(error))
-            } else if let output, output.layers.isEmpty {
-                ContentUnavailableView("No layers generated", systemImage: "square.dashed", description: Text("The engine returned an empty layer set."))
-            } else if let output {
-                LayerPreview(output: output, selection: $selection, zoom: $zoom)
-            } else {
-                ProgressView("Preparing preview…")
-            }
-        }
-        .padding()
-    }
-}
+            Slider(value: layerSelection, in: 0...Double(max(layerCount - 1, 0)))
+                .disabled(layerCount == 0 || isGenerating)
+                .help("Select the layer to display.")
 
-struct LayerPreview: View {
-    let output: SliceOutput
-    @Binding var selection: Int?
-    @Binding var zoom: Double
-
-    private let columns = [GridItem(.adaptive(minimum: 180), spacing: 12)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Layers").font(.headline)
-                Text("\(output.layers.count) total").foregroundStyle(.secondary)
-                Spacer()
-                Text("Zoom").font(.caption).foregroundStyle(.secondary)
-                Slider(value: $zoom, in: 0.5...2.5).frame(width: 120)
-                Text("SVG").font(.caption.monospaced()).foregroundStyle(.secondary)
-            }
-            if !output.warnings.isEmpty {
-                Label("\(output.warnings.count) warning\(output.warnings.count == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help(output.warnings.joined(separator: "\n"))
-            }
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(output.layers, id: \.index) { layer in
-                        LayerCard(layer: layer, page: page(for: layer.index), zoom: zoom, isSelected: selection == layer.index)
-                            .onTapGesture { selection = layer.index }
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-        }
-        .padding(12)
-        .background(.bar)
-    }
-
-    private func page(for layer: Int) -> Int? {
-        output.pages.first(where: { ($0.layerStart..<$0.layerStart + $0.layerCount).contains(layer) })?.index
-    }
-}
-
-private struct LayerCard: View {
-    let layer: LayerOutput
-    let page: Int?
-    let zoom: Double
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.08))
-                if let svg = layer.svg, !svg.isEmpty {
-                    SVGPreview(svg: svg, zoom: zoom)
+                RoundedRectangle(cornerRadius: 6).fill(.black.opacity(0.08))
+                if isGenerating {
+                    VStack(spacing: 8) {
+                        ProgressView(value: progress)
+                        Label("Generating layer preview…", systemImage: "hourglass")
+                            .font(.caption)
+                    }
+                    .padding()
+                } else if let error {
+                    VStack(spacing: 8) {
+                        Label("Preview unavailable", systemImage: "exclamationmark.triangle")
+                        Text(error).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        Button("Retry", action: onRetry)
+                    }
+                    .padding()
+                } else if let svg = selectedSVG {
+                    SVGPreview(svg: svg, zoom: 1)
                         .padding(8)
+                } else if output == nil {
+                    ContentUnavailableView("No layer preview", systemImage: "square.dashed",
+                                           description: Text("Enable the preview after loading an STL model."))
                 } else {
-                    VStack(spacing: 4) {
-                        Image(systemName: layer.isEmpty ? "square.dashed" : "exclamationmark.triangle")
-                        Text(layer.isEmpty ? "Empty layer" : "Preview unavailable").font(.caption)
-                    }.foregroundStyle(.secondary)
+                    ContentUnavailableView("No layer data", systemImage: "square.dashed")
                 }
             }
-            .frame(height: 150)
-            Text("Layer \(layer.index + 1)  •  Z \(layer.z, specifier: "%.2f") mm").font(.callout.weight(.medium))
-            HStack(spacing: 8) {
-                Text(layer.isEmpty ? "Empty" : "Cut data")
-                if let page { Text("Page \(page + 1)") }
-            }.font(.caption).foregroundStyle(.secondary)
+            .frame(height: 280)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("SVG preview for layer \(selection + 1)")
         }
-        .padding(8)
-        .background(.background, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2))
-        .contentShape(Rectangle())
+    }
+
+    private var selectedSVG: String? {
+        guard let output, selection >= 0, selection < output.layers.count else { return nil }
+        return output.layers[selection].previewSVG ?? output.layers[selection].svg
+    }
+
+    private var layerSelection: Binding<Double> {
+        Binding(get: { Double(selection) }, set: { selection = min(max(Int($0.rounded()), 0), max(layerCount - 1, 0)) })
+    }
+
+    private var layerNumber: Binding<Double> {
+        Binding(get: { Double(selection + 1) }, set: { selection = min(max(Int($0.rounded()) - 1, 0), max(layerCount - 1, 0)) })
     }
 }
 

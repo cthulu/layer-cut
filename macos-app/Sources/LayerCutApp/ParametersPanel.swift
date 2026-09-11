@@ -14,10 +14,17 @@ struct ParametersPanel: View {
     let onOpenSTL: () -> Void
     let onExport: () -> Void
     @Binding var livePreview: Bool
+    @Binding var layerPreview: Bool
+    @Binding var activeLayer: Int
+    let layerOutput: SliceOutput?
+    let layerCount: Int
     let onPreview: () -> Void
-    let onPreviewLayers: () -> Void
     let isGeneratingPreview: Bool
     let previewProgress: Double
+    let isGeneratingLayerPreview: Bool
+    let layerPreviewProgress: Double
+    let previewError: String?
+    let onRetryLayerPreview: () -> Void
     let isExporting: Bool
     let progress: Double
     let report: ExportReport?
@@ -37,6 +44,8 @@ struct ParametersPanel: View {
             }
             Section("Preview") {
                 Toggle("Live preview", isOn: $livePreview)
+                Toggle("Layer preview", isOn: $layerPreview)
+                    .help("Generate an SVG preview of the selected layer and the next-layer guide.")
                 HStack {
                     Button(action: onPreview) {
                         if isGeneratingPreview {
@@ -47,10 +56,12 @@ struct ParametersPanel: View {
                         }
                     }
                     .disabled(livePreview || isGeneratingPreview)
-                    Spacer()
-                    Button(action: onPreviewLayers) {
-                        Label("Preview layers", systemImage: "square.stack.3d.up")
-                    }
+                }
+                if layerPreview {
+                    LayerPreviewInline(output: layerOutput, selection: $activeLayer,
+                                       layerCount: layerCount, isGenerating: isGeneratingLayerPreview,
+                                       progress: layerPreviewProgress, error: previewError,
+                                       onRetry: onRetryLayerPreview)
                 }
             }
             DisclosureGroup("Transform", isExpanded: $orientationExpanded) {
@@ -178,7 +189,7 @@ struct ParametersPanel: View {
     private var numberFormat: FloatingPointFormatStyle<Double> { .number.locale(Locale(identifier: "C")).precision(.fractionLength(0...2)) }
 }
 
-private struct NumericField: View {
+struct NumericField: View {
     let title: String?
     @Binding var value: Double
     @State private var text = ""

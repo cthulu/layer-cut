@@ -59,10 +59,9 @@ private struct ContentView: View {
     @State private var layersExpanded = false
     @State private var layerOutputIdentity: PreviewIdentity?
     @State private var previewGeneration = UUID()
-    @State private var previewZoom = 1.0
     @State private var previewError: String?
     @State private var previewProgress = 0.0
-    @State private var isLayerPreviewPresented = false
+    @State private var layerPreviewEnabled = false
     @State private var snapshot: MeshSnapshot?
     @State private var stackedSnapshot: MeshSnapshot?
     @State private var isGeneratingStackedPreview = false
@@ -83,7 +82,7 @@ private struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-             ParametersPanel(profileController: profiles, transform: $transform, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, onPreview: startStackedPreview, onPreviewLayers: presentLayerPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status, onShowDiagnostics: { DiagnosticsWindowController.show(diagnostics) })
+             ParametersPanel(profileController: profiles, transform: $transform, normalizedHeight: normalizedHeight, outputDirectory: outputDirectory, onOpenSTL: openStlPanel, onExport: beginExport, livePreview: $appSettings.settings.livePreview, layerPreview: $layerPreviewEnabled, activeLayer: $activeLayer, layerOutput: layerOutput, layerCount: layerCount, onPreview: startStackedPreview, isGeneratingPreview: isGeneratingStackedPreview, previewProgress: stackedPreviewProgress, isGeneratingLayerPreview: previewTask != nil, layerPreviewProgress: previewProgress, previewError: previewError, onRetryLayerPreview: startPreview, isExporting: exportTask != nil, progress: exportProgress, report: exportReport, status: status, onShowDiagnostics: { DiagnosticsWindowController.show(diagnostics) })
                 .safeAreaInset(edge: .bottom) {
                     if let error = profiles.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(8) }
                 }
@@ -91,7 +90,7 @@ private struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 360, ideal: 390, max: 440)
         } detail: {
              VStack(spacing: 0) {
-                 HSplitView {
+                 HStack(spacing: 0) {
                      VStack(spacing: 0) {
                          Text("Original STL model").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(8)
                          ZStack {
@@ -139,33 +138,35 @@ private struct ContentView: View {
              }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.windowBackground)
          }
           .task(id: snapshotTaskKey) { await refreshSnapshots() }
-           .onChange(of: profiles.activeProfile) { _, _ in
-             layerOutput = nil
-             layerOutputIdentity = nil
-             previewError = nil
-                cancelPreview()
-              cancelStackedPreview()
-               if appSettings.settings.livePreview { startStackedPreview() }
+            .onChange(of: profiles.activeProfile) { _, _ in
+              layerOutput = nil
+              layerOutputIdentity = nil
+              previewError = nil
+              activeLayer = 0
+                 cancelPreview()
+               cancelStackedPreview()
+                if appSettings.settings.livePreview { startStackedPreview() }
+                if layerPreviewEnabled { startPreview() }
            }
-           .onChange(of: transform) { _, _ in
+            .onChange(of: transform) { _, _ in
                layerOutput = nil
                layerOutputIdentity = nil
-               previewError = nil
-               cancelStackedPreview()
-               cancelPreview()
-               if appSettings.settings.livePreview { startStackedPreview() }
+                previewError = nil
+                activeLayer = 0
+                cancelStackedPreview()
+                cancelPreview()
+                if appSettings.settings.livePreview { startStackedPreview() }
+                if layerPreviewEnabled { startPreview() }
            }
-          .onChange(of: appSettings.settings.livePreview) { _, enabled in
-              if enabled { startStackedPreview() } else { cancelStackedPreview() }
-          }
+           .onChange(of: appSettings.settings.livePreview) { _, enabled in
+               if enabled { startStackedPreview() } else { cancelStackedPreview() }
+           }
+           .onChange(of: layerPreviewEnabled) { _, enabled in
+               if enabled { activeLayer = 0; startPreview() }
+               else { layerOutput = nil; layerOutputIdentity = nil; previewError = nil; cancelPreview() }
+           }
          .onReceive(NotificationCenter.default.publisher(for: .layerCutOpenSTL)) { _ in
              openStlPanel()
-         }
-         .sheet(isPresented: $isLayerPreviewPresented, onDismiss: cancelPreview) {
-             LayerPreviewSheet(output: layerOutput, task: previewTask != nil, progress: previewProgress,
-                               error: previewError, selection: Binding(get: { activeLayer }, set: { activeLayer = $0 ?? 0 }),
-                               zoom: $previewZoom, onCancel: { isLayerPreviewPresented = false })
-                 .frame(minWidth: 620, minHeight: 460)
          }
         .alert("Overwrite existing files?", isPresented: Binding(get: { pendingOverwritePaths != nil }, set: { if !$0 { pendingOverwritePaths = nil } })) {
             Button { pendingOverwritePaths = nil } label: { Label("Cancel", systemImage: "xmark") }
@@ -213,9 +214,10 @@ private struct ContentView: View {
             if appSettings.settings.livePreview { startStackedPreview() }
             activeLayer = 0
             layerOutput = nil
-            layerOutputIdentity = nil
-            cancelPreview()
-            status = "Loading model snapshot…"
+             layerOutputIdentity = nil
+             cancelPreview()
+             if layerPreviewEnabled { startPreview() }
+             status = "Loading model snapshot…"
         }
     }
 
@@ -230,14 +232,8 @@ private struct ContentView: View {
         startExport(allowOverwrite: false)
     }
 
-    private func presentLayerPreview() {
-        isLayerPreviewPresented = true
-        guard modelPath != nil else { previewError = "Open an STL model first."; return }
-        startPreview()
-    }
-
     private func startPreview() {
-        guard let modelPath else { return }
+        guard layerPreviewEnabled, let modelPath else { return }
         let profile = profiles.activeProfile
         let identity = PreviewIdentity(path: modelPath, profile: profile, transform: transform)
         guard layerOutputIdentity != identity else { return }
@@ -246,9 +242,10 @@ private struct ContentView: View {
         previewGeneration = generation
         previewError = nil
         previewProgress = 0
+        activeLayer = 0
         previewTask = Task {
             do {
-                let value = try await SlicingService().preview(path: modelPath, profile: profile, transform: transform, dpi: 96,
+                 let value = try await SlicingService().preview(path: modelPath, profile: profile, transform: transform, dpi: 96, includeLayerPreview: true,
                     progress: { value in Task { @MainActor in
                         guard generation == previewGeneration else { return }
                         previewProgress = value

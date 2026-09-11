@@ -43,7 +43,9 @@ see `BUILDING.md` for native macOS and cross-platform instructions.
 
 ## Implementation Order
 
-Specs are numbered 01–20 and organized under `specs/initial-app/` for the implemented engine/CLI and `specs/macos-app/` for the deferred macOS application. Execute sequentially — each step produces a verifiable artifact (compiling code + passing tests).
+Specs are organized in the `specs/` folder, and split per feature are in subfolders. 
+When implementing, check existing specs if there is related functionality and also check
+for potential conflicts.
 
 ## Dependencies
 
@@ -69,44 +71,18 @@ feat: add STL binary parser
 - Add unit tests for valid, truncated, ASCII, and malformed input
 ```
 
-## Current State
+## UI conventions
 
-- Steps 01-12, including substep 06A, are implemented and covered by CTest.
-- Step 08 is implemented: PNG rasterization uses even-odd coverage,
-  stb_image_write encoding, physical DPI metadata, and bounded allocations.
-- Step 09 is implemented: the pure C ABI exposes opaque mesh/config/result
-  handles, thread-local diagnostics, SVG/PNG access, and cleanup APIs.
-- Step 12 includes deterministic fixtures for cubes, negative bounds,
-  disconnected components, concavity, holes, and non-divisible heights.
-- macOS app Steps 11 (architecture) and 12 (tooling) are implemented.
-- macOS app Steps 13 and 15 are implemented: the generated Xcode app includes
-  the Swift bridge, profile-driven parameters UI, versioned YAML persistence,
-  atomic writes, recovery, and focused profile tests.
-- macOS app Step 16 is implemented: typed detached Swift engine services use
-   transform-aware snapshots, copied export data, diagnostics, progress,
-   cancellation, and explicit opaque-handle lifetime management.
-- macOS app Step 18 is implemented: the RealityKit viewport converts engine
-   mesh snapshots in millimetre world coordinates, supports orbit/pan/zoom,
-   profile-synchronized axis/rotation/scale preview, active layer planes and
-   selection, and independent camera/transform reset.
-- macOS app Step 17 is implemented: lazy SwiftUI PNG layer previews use copied
-   engine bytes, expose layer metadata, warnings, page membership, zoom,
-   loading/error states, and drive the RealityKit active-layer highlight.
-- macOS app Step 20 is implemented: shared persisted settings cover default
-  profiles, output directories, recent STL paths, appearance, About/licenses,
-  and reproducible Release packaging with hardened runtime, signing, DMG, and
-  optional notarization documentation.
-- Cricut integration Step 17 is implemented: optional combined-SVG layer numbers
-   are configured through the engine, C ABI, CLI, and macOS profiles, with
-   deterministic bounding-box placement including shapes smaller than the label.
-- Cricut compatibility learning: Cricut Design Space may ignore the current
-  combined-SVG layer naming and display every layer with the same name (for
-  example, `page_000_layers_000-021`). This is likely not fixable through SVG
-  naming alone; treat it as a known limitation.
+- MacOS app should be a wrapper around the engine, do not perform complex logic in the app.
+- Numerical inputs should use NumericField and be formatted in C locale with 2 decimals
+- All inputs should have a human-friendly tooltip added to them
+- The sliders should not have "steps" indicators
 
 ## Updating This File
 
-Update this AGENTS.md after completing groups of steps to reflect current state.
+Update this AGENTS.md if there is significant change in the process of building, implementation or testing.
 
 ## Storing learnings
-Use LEARNINGS.md for learnings (information that should be preserved) and use it when planning
+
+Use LEARNINGS.md for learnings (information that should be preserved) and use it when planning and implementing.
+Suggest to store new learnings if you identify something new.

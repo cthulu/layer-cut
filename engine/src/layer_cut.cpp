@@ -15,6 +15,8 @@
 #include <atomic>
 #include <algorithm>
 #include <memory>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,6 +40,7 @@ struct ConfigHandle {
   int show_layer_numbers = 0;
   double layer_number_font_size_mm = 2.5;
   int cleanup_mode = 1;
+  int layer_preview = 0;
   layer_cut::ManufacturingCleanupOptions cleanup;
   slicer_progress_callback_t progress_callback = nullptr;
   void* progress_context = nullptr;
@@ -50,6 +53,7 @@ struct ConfigHandle {
 };
 struct LayerBytes {
   std::string svg;
+  std::string preview_svg;
   std::vector<uint8_t> png;
   double z = 0.0;
   bool empty = true;
@@ -70,6 +74,69 @@ struct ResultHandle {
   std::vector<int> diagnostic_severity;
   std::string stacked_stl;
 };
+
+void append_preview_paths(std::ostringstream& output,
+                          const std::vector<layer_cut::Contour>& contours,
+                          const char* indent) {
+  for (const auto& contour : contours) {
+    if (contour.points.size() < 3) continue;
+    output << indent << "<path d=\"M " << contour.points[0].x << ' '
+           << contour.points[0].y;
+    for (std::size_t i = 1; i < contour.points.size(); ++i) {
+      output << " L " << contour.points[i].x << ' ' << contour.points[i].y;
+    }
+    output << " Z\"/>\n";
+  }
+}
+
+std::string make_layer_preview_svg(const std::vector<layer_cut::Contour>& current,
+                                   const std::vector<layer_cut::Contour>* next,
+                                   const layer_cut::Vec2& min,
+                                   const layer_cut::Vec2& max,
+                                   std::size_t index, double z,
+                                   double inset, std::vector<std::string>* warnings) {
+  std::vector<layer_cut::Contour> guide;
+  if (next != nullptr && !next->empty()) {
+    guide = *next;
+#ifdef LAYER_CUT_HAVE_CLIPPER
+    if (std::isfinite(inset) && inset > 0.0) {
+      const auto offset = layer_cut::offset_polygons(*next, -inset);
+      const auto outside = offset.ok()
+                               ? layer_cut::difference_polygons(offset.contours, current)
+                               : layer_cut::PolygonOperationResult{};
+      if (offset.ok() && outside.ok() && outside.contours.empty() && !offset.contours.empty()) {
+        guide = offset.contours;
+      } else if (warnings) {
+        warnings->push_back("Layer preview inset invalid or not contained for layer " +
+                            std::to_string(index + 1) + "; using outline");
+      }
+    } else if (warnings) {
+      warnings->push_back("Layer preview inset must be positive; using outline");
+    }
+#else
+    if (warnings) warnings->push_back("Layer preview inset unavailable without Clipper2");
+#endif
+  }
+  const double width = max.x - min.x;
+  const double height = max.y - min.y;
+  std::ostringstream output;
+  output << std::fixed << std::setprecision(9)
+         << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+         << "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\""
+         << min.x << ' ' << min.y << ' ' << width << ' ' << height
+         << "\" width=\"" << width << "mm\" height=\"" << height
+         << "mm\" data-layer-index=\"" << index << "\" data-layer-z=\"" << z << "\">\n"
+         << "  <g id=\"cut-layer\" fill=\"black\" fill-rule=\"evenodd\" stroke=\"none\">\n";
+  append_preview_paths(output, current, "    ");
+  output << "  </g>\n";
+  if (!guide.empty()) {
+    output << "  <g id=\"next-layer-guide\" fill=\"none\" stroke=\"#1769aa\" stroke-width=\"0.25\">\n";
+    append_preview_paths(output, guide, "    ");
+    output << "  </g>\n";
+  }
+  output << "</svg>\n";
+  return output.str();
+}
 struct SnapshotHandle {
   std::vector<float> vertices;
   std::vector<uint32_t> indices;
@@ -188,6 +255,15 @@ int slicer_config_set_cleanup_mode(slicer_config_t config, int mode) {
     fail("Cleanup mode must be 0 (preserve), 1 (warn), or 2 (apply)"); return 0;
   }
   handle<ConfigHandle>(config)->cleanup_mode = mode; return 1;
+}
+
+int slicer_config_set_layer_preview(slicer_config_t config, int enabled) {
+  if (!valid_handle(config) || (enabled != 0 && enabled != 1)) {
+    fail("Layer preview must be 0 or 1");
+    return 0;
+  }
+  handle<ConfigHandle>(config)->layer_preview = enabled;
+  return 1;
 }
 
 int slicer_config_set_progress_callback(slicer_config_t config,
@@ -328,7 +404,7 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
       return nullptr;
     }
     result->layers.resize(prepared_layers.size());
-    for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
+    if (config_handle->layer_preview != 0) for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
       const auto& layer = prepared_layers[i];
       result->layers[i].z = layer.z;
       result->layers[i].empty = layer.contours.empty();
@@ -336,6 +412,15 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
           layer.contours,
           {{layer.min.x, layer.min.y}, {layer.max.x, layer.max.y},
            layer.index, layer.z});
+    }
+    for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
+      const auto& layer = prepared_layers[i];
+      const auto* next = i + 1 < prepared_layers.size()
+                             ? &prepared_layers[i + 1].contours
+                             : nullptr;
+      result->layers[i].preview_svg = make_layer_preview_svg(
+          layer.contours, next, layer.min, layer.max, layer.index, layer.z,
+          config_handle->cricut_guide_inset, &result->warnings);
     }
     result->pages.reserve(pages.pages.size());
     for (const auto& page : pages.pages) {
@@ -370,6 +455,8 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
   }
 
   result->layers.resize(sliced.layers.size());
+  std::vector<std::vector<layer_cut::Contour>> preview_contours;
+  preview_contours.reserve(sliced.layers.size());
   for (std::size_t i = 0; i < sliced.layers.size(); ++i) {
     if (cancelled(*config_handle)) { delete result; fail("Slicing cancelled"); return nullptr; }
     const auto& layer = sliced.layers[i];
@@ -390,6 +477,9 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
     contours = cleanup.contours;
     result->warnings.insert(result->warnings.end(), cleanup.warnings.begin(), cleanup.warnings.end());
 #endif
+    if (config_handle->layer_preview != 0) {
+      preview_contours.push_back(contours);
+    }
     result->layers[i].empty = contours.empty();
     // Keep vector layer data available for the macOS preview. PNG is an export
     // format; Cricut formats still produce SVG page data and need SVG layers.
@@ -408,6 +498,13 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
           total_layers == 0 ? 1.0
                             : static_cast<double>(current_layer) / total_layers);
     }
+  }
+  if (config_handle->layer_preview != 0) for (std::size_t i = 0; i < sliced.layers.size(); ++i) {
+    const auto& layer = sliced.layers[i];
+    const auto* next = i + 1 < preview_contours.size() ? &preview_contours[i + 1] : nullptr;
+    result->layers[i].preview_svg = make_layer_preview_svg(
+        preview_contours[i], next, layer.min, layer.max, layer.index, layer.z,
+        config_handle->cricut_guide_inset, &result->warnings);
   }
   const auto stacked = layer_cut::make_stacked_preview(sliced.layers,
                                                        config_handle->layer_height);
@@ -454,6 +551,20 @@ const char* slicer_result_layer_svg(slicer_result_t result, int index) {
 size_t slicer_result_layer_svg_size(slicer_result_t result, int index) {
   const char* value = slicer_result_layer_svg(result, index);
   return value == nullptr ? 0 : handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].svg.size();
+}
+
+const char* slicer_result_layer_preview_svg(slicer_result_t result, int index) {
+  if (!valid_handle(result) || index < 0 ||
+      static_cast<std::size_t>(index) >= handle<ResultHandle>(result)->layers.size()) {
+    fail("Layer preview SVG index is out of range"); return nullptr;
+  }
+  const auto& svg = handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].preview_svg;
+  return svg.empty() ? nullptr : svg.c_str();
+}
+
+size_t slicer_result_layer_preview_svg_size(slicer_result_t result, int index) {
+  const char* value = slicer_result_layer_preview_svg(result, index);
+  return value == nullptr ? 0 : handle<ResultHandle>(result)->layers[static_cast<std::size_t>(index)].preview_svg.size();
 }
 
 int slicer_result_page_count(slicer_result_t result) {

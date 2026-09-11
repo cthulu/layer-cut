@@ -86,6 +86,8 @@ alone.
 ## Generation and State
 
 - Do not generate layer-preview SVGs while the toggle is off.
+- Stacked-preview and export requests must explicitly disable layer-preview SVG
+  composition; slicing them must not perform hidden layer-preview work.
 - Toggling on starts generation for layer 0 and shows the spinner immediately.
 - Use the engine's determinate layer progress where available, while retaining
   a spinner and treating the percentage as approximate across non-layer phases.
@@ -159,6 +161,8 @@ boundary without changing the UI contract.
 - Invalid inset/guide geometry follows the existing combined-SVG fallback and
   warning behavior.
 - No stale asynchronous result can overwrite a newer preview.
+- Stacked preview remains independent of layer-preview SVG generation and does
+  not incur its polygon-offset/composition cost while the toggle is off.
 - Unit/integration tests cover layer selection bounds, lifecycle resets,
   cancellation/stale results, last-layer behavior, inset/fallback behavior,
   and SVG visual/structural composition.

@@ -38,6 +38,9 @@ func layer_cut_config_set_layer_number_font_size(_ config: UnsafeMutableRawPoint
 @_silgen_name("slicer_config_set_cleanup_mode")
 func layer_cut_config_set_cleanup_mode(_ config: UnsafeMutableRawPointer, _ mode: Int32) -> Int32
 
+@_silgen_name("slicer_config_set_layer_preview")
+func layer_cut_config_set_layer_preview(_ config: UnsafeMutableRawPointer, _ enabled: Int32) -> Int32
+
 @_silgen_name("slicer_config_set_cleanup_thresholds")
 func layer_cut_config_set_cleanup_thresholds(_ config: UnsafeMutableRawPointer, _ featureWidth: CDouble, _ islandArea: CDouble, _ holeWidth: CDouble, _ bridgeWidth: CDouble) -> Int32
 
@@ -72,6 +75,9 @@ func layer_cut_result_warning_count(_ result: UnsafeMutableRawPointer) -> Int32
 
 @_silgen_name("slicer_result_layer_svg")
 func layer_cut_result_layer_svg(_ result: UnsafeMutableRawPointer, _ index: Int32) -> UnsafePointer<CChar>?
+
+@_silgen_name("slicer_result_layer_preview_svg")
+func layer_cut_result_layer_preview_svg(_ result: UnsafeMutableRawPointer, _ index: Int32) -> UnsafePointer<CChar>?
 
 @_silgen_name("slicer_result_layer_png")
 func layer_cut_result_layer_png(_ result: UnsafeMutableRawPointer, _ index: Int32, _ size: UnsafeMutablePointer<Int>) -> UnsafePointer<UInt8>?
@@ -348,6 +354,11 @@ func resultWarningCount(_ result: SliceResultHandle) -> Int32 {
 func resultLayerSvg(_ result: SliceResultHandle, index: Int32) -> String? {
     let ptr = layer_cut_result_layer_svg(result.raw, index)
     guard let ptr = ptr else { return nil }
+    return String(cString: ptr)
+}
+
+func resultLayerPreviewSvg(_ result: SliceResultHandle, index: Int32) -> String? {
+    guard let ptr = layer_cut_result_layer_preview_svg(result.raw, index) else { return nil }
     return String(cString: ptr)
 }
 

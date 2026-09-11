@@ -44,6 +44,7 @@ int slicer_config_set_cricut_guide_inset(slicer_config_t config, double inset_mm
 int slicer_config_set_show_layer_numbers(slicer_config_t config, int enabled);
 int slicer_config_set_layer_number_font_size(slicer_config_t config, double size_mm);
 int slicer_config_set_cleanup_mode(slicer_config_t config, int mode);
+int slicer_config_set_layer_preview(slicer_config_t config, int enabled);
 int slicer_config_set_progress_callback(slicer_config_t config,
                                          slicer_progress_callback_t callback,
                                          void* context);
@@ -68,6 +69,8 @@ const uint8_t* slicer_result_layer_png(slicer_result_t result, int index,
                                        size_t* size);
 const char* slicer_result_layer_svg(slicer_result_t result, int index);
 size_t slicer_result_layer_svg_size(slicer_result_t result, int index);
+const char* slicer_result_layer_preview_svg(slicer_result_t result, int index);
+size_t slicer_result_layer_preview_svg_size(slicer_result_t result, int index);
 int slicer_result_page_count(slicer_result_t result);
 const char* slicer_result_page_cut_svg(slicer_result_t result, int page);
 size_t slicer_result_page_cut_svg_size(slicer_result_t result, int page);

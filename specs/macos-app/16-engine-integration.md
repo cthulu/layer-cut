@@ -33,6 +33,9 @@ and diagnostics.
 ## Layer Preview Boundary
 
 - Layer preview is always SVG and must not depend on the selected export format.
+- The C ABI request includes an explicit layer-preview-generation flag. Stacked
+  preview and export pass it disabled; the opt-in layer-preview request enables
+  it.
 - The engine owns contour offsets, guide containment, fallback outlines, and
   guide warnings; Swift only renders the returned SVG.
 - The generation request includes the active transform, layer height, cleanup

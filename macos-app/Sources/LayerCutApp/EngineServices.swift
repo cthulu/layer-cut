@@ -36,6 +36,7 @@ struct LayerOutput: Sendable {
     let z: Double
     let isEmpty: Bool
     let svg: String?
+    let previewSVG: String?
     let png: Data?
 }
 
@@ -137,6 +138,7 @@ final class MeshService: Sendable {
 
 final class SlicingService: Sendable {
     func slice(path: String, profile: SlicingProfile, transform: TransformSession = .identity,
+               includeLayerPreview: Bool = false,
                progress: (@Sendable (Double) -> Void)? = nil) async throws -> SliceOutput {
         let cancellation = try makeCancellation()
         return try await withTaskCancellationHandler {
@@ -144,7 +146,7 @@ final class SlicingService: Sendable {
                 defer { layer_cut_free_cancellation(cancellation.raw) }
                 let mesh = try loadStl(path: path)
                 let config = try createConfig()
-                let progressBox = try configure(config, profile: profile, transform: transform, cancellation: cancellation.raw, progress: progress)
+                let progressBox = try configure(config, profile: profile, transform: transform, cancellation: cancellation.raw, includeLayerPreview: includeLayerPreview, progress: progress)
                 _ = progressBox
                 guard let resultRaw = layer_cut_slice(mesh.raw, config.raw) else {
                     throw EngineError.sliceFailed(lastErrorMessage() ?? "Unknown slice error")
@@ -159,9 +161,10 @@ final class SlicingService: Sendable {
 
     func preview(path: String, profile: SlicingProfile, transform: TransformSession = .identity,
                  dpi: Int = 96,
+                 includeLayerPreview: Bool = false,
                  progress: (@Sendable (Double) -> Void)? = nil) async throws -> SliceOutput {
         _ = dpi
-        return try await slice(path: path, profile: profile, transform: transform, progress: progress)
+        return try await slice(path: path, profile: profile, transform: transform, includeLayerPreview: includeLayerPreview, progress: progress)
     }
 
     private func makeCancellation() throws -> CancellationBox {
@@ -194,8 +197,9 @@ private func meshDiagnostics(_ mesh: UnsafeMutableRawPointer) -> [EngineDiagnost
 }
 
 private func configure(_ config: ConfigHandle, profile: SlicingProfile, transform: TransformSession,
-                      cancellation: UnsafeMutableRawPointer,
-                      progress: (@Sendable (Double) -> Void)?) throws -> ProgressBox {
+                       cancellation: UnsafeMutableRawPointer,
+                       includeLayerPreview: Bool,
+                       progress: (@Sendable (Double) -> Void)?) throws -> ProgressBox {
     let value = transform.validated()
     guard layer_cut_config_set_transform_euler(config.raw, axisValue(value.cuttingAxis), value.rotateX, value.rotateY, value.rotateZ, value.scale) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid transform") }
     try configSetLayerHeight(config, mm: profile.layerHeight)
@@ -215,6 +219,7 @@ private func configure(_ config: ConfigHandle, profile: SlicingProfile, transfor
     }
     try configSetCleanupMode(config, cleanupMode(profile.cleanupMode))
     try configSetCleanupThresholds(config, featureWidth: profile.featureWidth, islandArea: profile.islandArea, holeWidth: profile.holeWidth, bridgeWidth: profile.bridgeWidth)
+    guard layer_cut_config_set_layer_preview(config.raw, includeLayerPreview ? 1 : 0) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Invalid layer preview setting") }
     let box = ProgressBox(handler: progress)
     let context = Unmanaged.passUnretained(box).toOpaque()
     guard layer_cut_config_set_progress_callback(config.raw, engineProgress, context) != 0 else { throw EngineError.sliceFailed(lastErrorMessage() ?? "Could not configure progress") }
@@ -233,7 +238,8 @@ private func collect(_ result: SliceResultHandle) -> SliceOutput {
     let layers = (0..<Int(resultLayerCount(result))).map { index in
         LayerOutput(index: index, z: resultLayerZ(result, index: Int32(index)),
                     isEmpty: resultLayerIsEmpty(result, index: Int32(index)),
-                    svg: resultLayerSvg(result, index: Int32(index)),
+                     svg: resultLayerSvg(result, index: Int32(index)),
+                     previewSVG: resultLayerPreviewSvg(result, index: Int32(index)),
                     png: resultLayerPng(result, index: Int32(index)))
     }
     let pages = (0..<Int(resultPageCount(result))).compactMap { index -> CricutPageOutput? in
