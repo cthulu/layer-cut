@@ -33,6 +33,13 @@ layer-cut/
 ## Build
 
 ```bash
+./tools/build_cli.sh    # build CLI
+./tools/build_macos_app.sh     # build MacOS app
+```
+
+Alternatively thes could be to do just a build
+
+```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
@@ -74,7 +81,7 @@ feat: add STL binary parser
 ## UI conventions
 
 - MacOS app should be a wrapper around the engine, do not perform complex logic in the app.
-- Numerical inputs should use NumericField and be formatted in C locale with 2 decimals
+- Numerical inputs should use NumericField and be formatted in C locale with 2 decimals if they are floating point
 - All inputs should have a human-friendly tooltip added to them
 - The sliders should not have "steps" indicators
 
