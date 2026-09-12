@@ -126,6 +126,13 @@ final class MeshService: Sendable {
         guard let data = output.stackedSTL, !data.isEmpty else {
             throw EngineError.noData("This profile did not produce a stacked STL preview")
         }
+        return try await snapshotFromStackedSTL(data)
+    }
+
+    /// Converts a stacked STL produced by a slice back into a viewport snapshot,
+    /// so a slice can feed both the stacked 3D preview and the layer preview
+    /// without slicing the model twice.
+    func snapshotFromStackedSTL(_ data: Data) async throws -> MeshSnapshot {
         let temporaryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("layer-cut-stacked-\(UUID().uuidString).stl")
         try data.write(to: temporaryURL, options: .atomic)

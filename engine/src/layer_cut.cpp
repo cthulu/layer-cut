@@ -404,7 +404,7 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
       return nullptr;
     }
     result->layers.resize(prepared_layers.size());
-    if (config_handle->layer_preview != 0) for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
+    for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
       const auto& layer = prepared_layers[i];
       result->layers[i].z = layer.z;
       result->layers[i].empty = layer.contours.empty();
@@ -413,7 +413,9 @@ slicer_result_t slicer_slice(slicer_mesh_t mesh, slicer_config_t config) {
           {{layer.min.x, layer.min.y}, {layer.max.x, layer.max.y},
            layer.index, layer.z});
     }
-    for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
+    // Preview composition is opt-in; generating it unconditionally more than
+    // halves export/CLI throughput on Cricut formats.
+    if (config_handle->layer_preview != 0) for (std::size_t i = 0; i < prepared_layers.size(); ++i) {
       const auto& layer = prepared_layers[i];
       const auto* next = i + 1 < prepared_layers.size()
                              ? &prepared_layers[i + 1].contours

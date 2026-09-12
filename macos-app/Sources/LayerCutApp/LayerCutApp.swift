@@ -145,8 +145,7 @@ private struct ContentView: View {
               activeLayer = 0
                  cancelPreview()
                cancelStackedPreview()
-                if appSettings.settings.livePreview { startStackedPreview() }
-                if layerPreviewEnabled { startPreview() }
+               startPreviewPipeline()
            }
             .onChange(of: transform) { _, _ in
                layerOutput = nil
@@ -155,14 +154,13 @@ private struct ContentView: View {
                 activeLayer = 0
                 cancelStackedPreview()
                 cancelPreview()
-                if appSettings.settings.livePreview { startStackedPreview() }
-                if layerPreviewEnabled { startPreview() }
+                startPreviewPipeline()
            }
            .onChange(of: appSettings.settings.livePreview) { _, enabled in
-               if enabled { startStackedPreview() } else { cancelStackedPreview() }
+               if enabled { startPreviewPipeline() } else { cancelStackedPreview() }
            }
            .onChange(of: layerPreviewEnabled) { _, enabled in
-               if enabled { activeLayer = 0; startPreview() }
+               if enabled { cancelStackedPreview(); activeLayer = 0; startPreview() }
                else { layerOutput = nil; layerOutputIdentity = nil; previewError = nil; cancelPreview() }
            }
          .onReceive(NotificationCenter.default.publisher(for: .layerCutOpenSTL)) { _ in
@@ -211,12 +209,11 @@ private struct ContentView: View {
             stackedSnapshot = nil
             stackedPreviewError = nil
             cancelStackedPreview()
-            if appSettings.settings.livePreview { startStackedPreview() }
             activeLayer = 0
             layerOutput = nil
              layerOutputIdentity = nil
              cancelPreview()
-             if layerPreviewEnabled { startPreview() }
+             startPreviewPipeline()
              status = "Loading model snapshot…"
         }
     }
@@ -232,23 +229,52 @@ private struct ContentView: View {
         startExport(allowOverwrite: false)
     }
 
+    /// The layer preview and stacked 3D preview share one slice when the layer
+    /// preview is available; otherwise only the stacked preview is sliced.
+    /// Launching both as separate full slices roughly doubles the time to the
+    /// interactive preview due to CPU contention.
+    private func startPreviewPipeline() {
+        if layerPreviewEnabled {
+            startPreview()
+        } else if appSettings.settings.livePreview {
+            startStackedPreview()
+        }
+    }
+
     private func startPreview() {
         guard layerPreviewEnabled, let modelPath else { return }
         let profile = profiles.activeProfile
         let identity = PreviewIdentity(path: modelPath, profile: profile, transform: transform)
-        guard layerOutputIdentity != identity else { return }
+        // Inline and stacked previews only need vector layers and the stacked
+        // STL. Avoid Cricut page packing and page SVG generation here.
+        var previewProfile = profile
+        previewProfile.outputFormat = "svg"
+        // The slice output carries the stacked STL alongside the layer SVGs, so
+        // a matching cached output can rebuild the stacked viewport without a
+        // new slice.
+        if layerOutputIdentity == identity, let output = layerOutput {
+            if let data = output.stackedSTL, !data.isEmpty,
+               stackedPreviewIdentity != identity || stackedSnapshot == nil {
+                deriveStackedSnapshot(from: data, identity: identity)
+            }
+            return
+        }
         previewTask?.cancel()
         let generation = UUID()
         previewGeneration = generation
         previewError = nil
         previewProgress = 0
         activeLayer = 0
+        isGeneratingStackedPreview = true
+        stackedPreviewProgress = 0
+        stackedPreviewError = nil
         previewTask = Task {
             do {
-                 let value = try await SlicingService().preview(path: modelPath, profile: profile, transform: transform, dpi: 96, includeLayerPreview: true,
+                 let value = try await SlicingService().preview(path: modelPath, profile: previewProfile, transform: transform, dpi: 96, includeLayerPreview: true,
                     progress: { value in Task { @MainActor in
                         guard generation == previewGeneration else { return }
                         previewProgress = value
+                        stackedPreviewProgress = value
                     } })
                 await MainActor.run {
                     guard generation == previewGeneration,
@@ -259,16 +285,52 @@ private struct ContentView: View {
                     previewTask = nil
                     status = "Preview ready"
                 }
+                if let data = value.stackedSTL, !data.isEmpty {
+                    deriveStackedSnapshot(from: data, identity: identity)
+                } else {
+                    await MainActor.run {
+                        guard generation == previewGeneration else { return }
+                        isGeneratingStackedPreview = false
+                        stackedPreviewError = "This profile did not produce a stacked STL preview"
+                    }
+                }
             } catch is CancellationError {
                 await MainActor.run {
-                    if generation == previewGeneration { previewTask = nil }
+                    if generation == previewGeneration { previewTask = nil; isGeneratingStackedPreview = false }
                 }
             } catch {
                 await MainActor.run {
                     guard generation == previewGeneration else { return }
                     previewError = error.localizedDescription
                     previewTask = nil
+                    isGeneratingStackedPreview = false
                     status = "Preview failed"
+                }
+            }
+        }
+    }
+
+    /// Converts stacked STL from a finished slice into the 3D viewport snapshot,
+    /// sharing the slice result instead of re-slicing the model.
+    private func deriveStackedSnapshot(from data: Data, identity: PreviewIdentity) {
+        isGeneratingStackedPreview = true
+        Task {
+            do {
+                let value = try await meshService.snapshotFromStackedSTL(data)
+                await MainActor.run {
+                    guard layerPreviewEnabled,
+                          layerOutputIdentity == identity else { return }
+                    stackedSnapshot = value
+                    stackedPreviewIdentity = identity
+                    isGeneratingStackedPreview = false
+                    stackedPreviewError = nil
+                }
+            } catch {
+                await MainActor.run {
+                    guard layerPreviewEnabled,
+                          layerOutputIdentity == identity else { return }
+                    isGeneratingStackedPreview = false
+                    stackedPreviewError = error.localizedDescription
                 }
             }
         }
@@ -281,6 +343,9 @@ private struct ContentView: View {
     }
 
     private func startStackedPreview() {
+        // Route through the combined slice when the layer preview is on so the
+        // manual preview button never starts a second slicing pass.
+        if layerPreviewEnabled { startPreview(); return }
         guard let modelPath else { return }
         let profile = profiles.activeProfile
         let identity = PreviewIdentity(path: modelPath, profile: profile, transform: transform)
