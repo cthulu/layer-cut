@@ -14,8 +14,8 @@ struct LayerPreviewInline: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Layer")
-                NumericField("Layer number", value: layerNumber)
-                    .frame(width: 74)
+                 NumericField("Layer number", value: layerNumber, fractionDigits: 0)
+                     .frame(width: 74)
                 Text("of \(max(layerCount, 0))").foregroundStyle(.secondary)
             }
             Slider(value: layerSelection, in: 0...Double(max(layerCount - 1, 0)))

@@ -192,11 +192,13 @@ struct ParametersPanel: View {
 struct NumericField: View {
     let title: String?
     @Binding var value: Double
+    let fractionDigits: Int
     @State private var text = ""
 
-    init(_ title: String? = nil, value: Binding<Double>) {
+    init(_ title: String? = nil, value: Binding<Double>, fractionDigits: Int = 2) {
         self.title = title
         self._value = value
+        self.fractionDigits = fractionDigits
     }
 
     var body: some View {
@@ -216,6 +218,6 @@ struct NumericField: View {
     }
 
     private func renderedValue(_ value: Double) -> String {
-        value.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).precision(.fractionLength(2)))
+        value.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).precision(.fractionLength(fractionDigits)))
     }
 }
