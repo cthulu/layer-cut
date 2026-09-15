@@ -18,7 +18,11 @@ add_executable(LayerCutApp
   Sources/LayerCutApp/ParametersPanel.swift
   Sources/LayerCutApp/LayerPreview.swift
   Sources/LayerCutApp/AppSettings.swift
+  ../assets/Icon.icns
 )
+
+# Tell CMake's Xcode generator to copy the icon into the app bundle's Resources folder
+set_source_files_properties(../assets/Icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 target_link_libraries(LayerCutApp
   PRIVATE
@@ -40,6 +44,7 @@ target_link_libraries(LayerCutApp
 # Set macOS deployment target (RealityKit requires macOS 14+).
 set_target_properties(LayerCutApp PROPERTIES
   MACOSX_BUNDLE YES
+  MACOSX_BUNDLE_ICON_FILE "Icon"
   MACOSX_BUNDLE_BUNDLE_VERSION "${LAYER_CUT_VERSION}"
   MACOSX_BUNDLE_SHORT_VERSION_STRING "${LAYER_CUT_VERSION}"
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.layercut.app"

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="layer1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e94560"/>
+      <stop offset="100%" stop-color="#c23152"/>
+    </linearGradient>
+    <linearGradient id="layer2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f3460"/>
+      <stop offset="100%" stop-color="#0a2647"/>
+    </linearGradient>
+    <linearGradient id="layer3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#533483"/>
+      <stop offset="100%" stop-color="#3b2066"/>
+    </linearGradient>
+    <linearGradient id="scissors" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd700"/>
+      <stop offset="100%" stop-color="#daa520"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+
+  <!-- Three stacked layers with cut lines -->
+  <!-- Bottom layer -->
+  <g filter="url(#shadow)">
+    <path d="M120 340 L200 280 L360 280 L400 320 L320 380 L160 380 Z"
+          fill="url(#layer1)" stroke="#fff" stroke-width="2" stroke-opacity="0.3"/>
+    <!-- Cut line through bottom layer -->
+    <line x1="180" y1="330" x2="340" y2="330"
+          stroke="#ffd700" stroke-width="3" stroke-dasharray="8,4" opacity="0.8"/>
+  </g>
+
+  <!-- Middle layer -->
+  <g filter="url(#shadow)">
+    <path d="M140 280 L220 220 L380 220 L420 260 L340 320 L180 320 Z"
+          fill="url(#layer2)" stroke="#fff" stroke-width="2" stroke-opacity="0.3"/>
+    <!-- Cut line through middle layer -->
+    <line x1="200" y1="270" x2="360" y2="270"
+          stroke="#ffd700" stroke-width="3" stroke-dasharray="8,4" opacity="0.8"/>
+  </g>
+
+  <!-- Top layer (partially cut) -->
+  <g filter="url(#shadow)">
+    <path d="M160 220 L240 160 L400 160 L440 200 L360 260 L200 260 Z"
+          fill="url(#layer3)" stroke="#fff" stroke-width="2" stroke-opacity="0.3"/>
+    <!-- Cut line through top layer -->
+    <line x1="220" y1="210" x2="380" y2="210"
+          stroke="#ffd700" stroke-width="3" stroke-dasharray="8,4" opacity="0.8"/>
+  </g>
+
+  <!-- Scissors icon on the right -->
+  <g transform="translate(380, 100) rotate(-15)">
+    <!-- Left blade -->
+    <path d="M30 90 L50 10 L60 10 L55 85 Z" fill="url(#scissors)" stroke="#b8860b" stroke-width="1"/>
+    <!-- Right blade -->
+    <path d="M30 90 L10 10 L0 10 L5 85 Z" fill="url(#scissors)" stroke="#b8860b" stroke-width="1"/>
+    <!-- Pivot -->
+    <circle cx="30" cy="90" r="8" fill="#daa520" stroke="#b8860b" stroke-width="2"/>
+    <!-- Handles -->
+    <ellipse cx="15" cy="110" rx="12" ry="16" fill="none" stroke="#ffd700" stroke-width="3"/>
+    <ellipse cx="45" cy="110" rx="12" ry="16" fill="none" stroke="#ffd700" stroke-width="3"/>
+  </g>
+
+  <!-- Layer label -->
+  <text x="256" y="470" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif"
+        font-size="28" font-weight="600" letter-spacing="3">LAYERCUT</text>
+</svg>
