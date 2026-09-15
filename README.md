@@ -5,7 +5,7 @@ machines. It produces dimensionally accurate SVG or PNG files, and can also
 arrange layers into Cricut-compatible pages. A C++17 engine powers both the
 command-line tool and the macOS SwiftUI application.
 
-![Screenshot](./assets/app1/png)
+![Screenshot](./assets/app1.png)
 
 ## Features
 
