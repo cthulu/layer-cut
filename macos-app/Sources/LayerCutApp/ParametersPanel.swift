@@ -79,9 +79,9 @@ struct ParametersPanel: View {
                     .help("Model scale factor.")
             }
             DisclosureGroup("Slicing", isExpanded: $slicingExpanded) {
-                sliderRow("Layer height (mm)", value: profileBinding(\.layerHeight), range: 0.1...10)
+                sliderRow("Layer height (mm)", value: profileBinding(\.layerHeight, range: 0.1...10), range: 0.1...10)
                     .help("The vertical distance (thickness) of each 3D model slice.")
-                LabeledContent("Estimated layers", value: normalizedHeight > 0 ? "\(Int(ceil(normalizedHeight / profileController.activeProfile.layerHeight)))" : "Load a model")
+                LabeledContent("Estimated layers", value: estimatedLayerCountText)
                     .help("Total slices expected based on model height and slice thickness.")
             }
             DisclosureGroup("Cleanup", isExpanded: $cleanupExpanded) {
@@ -156,6 +156,13 @@ struct ParametersPanel: View {
     }
 
     private func profileBinding<T>(_ keyPath: WritableKeyPath<SlicingProfile, T>) -> Binding<T> { Binding(get: { profileController.activeProfile[keyPath: keyPath] }, set: { var profile = profileController.activeProfile; profile[keyPath: keyPath] = $0; profileController.activeProfile = profile }) }
+    private func profileBinding(_ keyPath: WritableKeyPath<SlicingProfile, Double>, range: ClosedRange<Double>) -> Binding<Double> {
+        Binding(get: { profileController.activeProfile[keyPath: keyPath] }, set: { value in
+            var profile = profileController.activeProfile
+            profile[keyPath: keyPath] = min(max(value.isFinite ? value : range.lowerBound, range.lowerBound), range.upperBound)
+            profileController.activeProfile = profile
+        })
+    }
     private func transformBinding(_ keyPath: WritableKeyPath<TransformSession, Double>, range: ClosedRange<Double>) -> Binding<Double> {
         Binding(get: { transform[keyPath: keyPath] }, set: { value in
             transform[keyPath: keyPath] = min(max(value.isFinite ? value : range.lowerBound, range.lowerBound), range.upperBound)
@@ -170,6 +177,11 @@ struct ParametersPanel: View {
             NumericField(value: profileBinding(keyPath))
                 .frame(width: 100)
         }
+    }
+    private var estimatedLayerCountText: String {
+        let layerHeight = profileController.activeProfile.layerHeight
+        guard normalizedHeight > 0, layerHeight.isFinite, layerHeight > 0 else { return "Load a model" }
+        return "\(Int(ceil(normalizedHeight / layerHeight)))"
     }
     private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 4) {

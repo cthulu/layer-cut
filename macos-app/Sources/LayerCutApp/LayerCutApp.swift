@@ -184,7 +184,9 @@ private struct ContentView: View {
 
     private var layerCount: Int {
         guard let snapshot else { return 1 }
-        return max(1, Int(ceil(Double(snapshot.bounds.max.z - snapshot.bounds.min.z) / profiles.activeProfile.layerHeight)))
+        let layerHeight = profiles.activeProfile.layerHeight
+        guard layerHeight.isFinite, layerHeight > 0 else { return 1 }
+        return max(1, Int(ceil(Double(snapshot.bounds.max.z - snapshot.bounds.min.z) / layerHeight)))
     }
 
     private var diagnostics: [ExportDiagnostic] {
