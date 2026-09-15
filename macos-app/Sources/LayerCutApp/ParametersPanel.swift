@@ -193,6 +193,7 @@ struct NumericField: View {
     let title: String?
     @Binding var value: Double
     let fractionDigits: Int
+    @FocusState private var isFocused: Bool
     @State private var text = ""
 
     init(_ title: String? = nil, value: Binding<Double>, fractionDigits: Int = 2) {
@@ -207,9 +208,10 @@ struct NumericField: View {
             .font(.body.monospacedDigit())
             .multilineTextAlignment(.trailing)
             .accessibilityLabel(title ?? "Numeric value")
+            .focused($isFocused)
             .onAppear { text = renderedValue(value) }
             .onChange(of: value) { _, newValue in
-                if Double(text) != newValue { text = renderedValue(newValue) }
+                if !isFocused, Double(text) != newValue { text = renderedValue(newValue) }
             }
             .onChange(of: text) { _, newText in
                 if let parsed = Double(newText), parsed.isFinite { value = parsed }
