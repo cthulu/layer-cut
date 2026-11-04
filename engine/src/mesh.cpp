@@ -1,9 +1,11 @@
 #include "mesh.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -267,18 +269,42 @@ ValidationResult validate_and_normalize(const std::vector<Triangle>& triangles) 
                    non_manifold_edges, "Mesh contains non-manifold edges");
   }
 
+  // Per-triangle keys and bounds are computed once; the pair loop below would
+  // otherwise recompute them for every candidate pair.
+  const std::size_t triangle_count = triangles.size();
+  std::vector<std::array<VertexKey, 3>> triangle_keys(triangle_count);
+  std::vector<Vec3> bounds_min(triangle_count);
+  std::vector<Vec3> bounds_max(triangle_count);
+  for (std::size_t i = 0; i < triangle_count; ++i) {
+    const Triangle& triangle = triangles[i];
+    triangle_keys[i] = {vertex_key(triangle.a), vertex_key(triangle.b),
+                        vertex_key(triangle.c)};
+    bounds_min[i] = {std::min({triangle.a.x, triangle.b.x, triangle.c.x}),
+                     std::min({triangle.a.y, triangle.b.y, triangle.c.y}),
+                     std::min({triangle.a.z, triangle.b.z, triangle.c.z})};
+    bounds_max[i] = {std::max({triangle.a.x, triangle.b.x, triangle.c.x}),
+                     std::max({triangle.a.y, triangle.b.y, triangle.c.y}),
+                     std::max({triangle.a.z, triangle.b.z, triangle.c.z})};
+  }
+  // Sweep-and-prune along X: intersecting triangles must overlap in every
+  // axis, so candidates are visited in ascending min-X order and the inner
+  // loop stops at the first triangle starting past the current max-X. The
+  // full AABB overlap check inside triangles_intersect handles Y and Z.
+  std::vector<std::size_t> order(triangle_count);
+  std::iota(order.begin(), order.end(), std::size_t{0});
+  std::sort(order.begin(), order.end(),
+            [&](std::size_t first, std::size_t second) {
+              return bounds_min[first].x < bounds_min[second].x;
+            });
   std::size_t self_intersections = 0;
-  for (std::size_t i = 0; i < triangles.size(); ++i) {
-    for (std::size_t j = i + 1; j < triangles.size(); ++j) {
-      const VertexKey first_keys[] = {vertex_key(triangles[i].a),
-                                      vertex_key(triangles[i].b),
-                                      vertex_key(triangles[i].c)};
-      const VertexKey second_keys[] = {vertex_key(triangles[j].a),
-                                       vertex_key(triangles[j].b),
-                                       vertex_key(triangles[j].c)};
+  for (std::size_t outer = 0; outer < triangle_count; ++outer) {
+    const std::size_t i = order[outer];
+    for (std::size_t inner = outer + 1; inner < triangle_count; ++inner) {
+      const std::size_t j = order[inner];
+      if (bounds_min[j].x > bounds_max[i].x) break;
       bool shares_vertex = false;
-      for (const VertexKey& first_key : first_keys) {
-        for (const VertexKey& second_key : second_keys) {
+      for (const VertexKey& first_key : triangle_keys[i]) {
+        for (const VertexKey& second_key : triangle_keys[j]) {
           shares_vertex = shares_vertex || first_key == second_key;
         }
       }
