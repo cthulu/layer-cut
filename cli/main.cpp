@@ -1,23 +1,18 @@
-#include "polygon_ops.h"
-#include "slicer.h"
-#include "stl_loader.h"
-#include "svg_writer.h"
-#include "png_writer.h"
-#include "stacked_preview.h"
-#include "stl_writer.h"
-#include "cricut_page.h"
-#include "transform.h"
+#include "layer_cut.h"
 
 #include <CLI/CLI.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <algorithm>
-#include <array>
-#include <cmath>
 #include <string>
+
 #ifdef _WIN32
 #include <io.h>
 #define LAYER_CUT_ISATTY _isatty
@@ -30,7 +25,7 @@
 
 namespace {
 
-void print_progress(std::size_t current_layer, std::size_t total_layers) {
+void print_progress(int current_layer, int total_layers) {
   static constexpr char spinner[] = {'|', '/', '-', '\\'};
   static std::size_t update = 0;
   const double fraction = total_layers == 0
@@ -52,6 +47,44 @@ void print_progress(std::size_t current_layer, std::size_t total_layers) {
     std::cerr << "Layer " << current_layer << " of " << total_layers << " ["
               << bar << "] " << std::setw(3) << percent << "%\n";
   }
+}
+
+void engine_progress(void* context, int current_layer, int total_layers,
+                     double fraction) {
+  (void)context;
+  (void)fraction;
+  print_progress(current_layer, total_layers);
+}
+
+std::string zero_padded(int value) {
+  const std::string digits = std::to_string(value);
+  return digits.size() >= 3 ? digits : std::string(3 - digits.size(), '0') + digits;
+}
+
+// Releases engine handles on every exit path. The free functions accept
+// null handles, so partially initialized guards are safe.
+struct EngineHandles {
+  slicer_mesh_t mesh = nullptr;
+  slicer_config_t config = nullptr;
+  slicer_result_t result = nullptr;
+  ~EngineHandles() {
+    slicer_free_result(result);
+    slicer_free_config(config);
+    slicer_free_mesh(mesh);
+  }
+};
+
+bool write_text_file(const std::filesystem::path& path, const char* contents) {
+  std::ofstream output(path, std::ios::binary);
+  return contents != nullptr && output && (output << contents);
+}
+
+bool write_binary_file(const std::filesystem::path& path, const uint8_t* data,
+                       std::size_t size) {
+  std::ofstream output(path, std::ios::binary);
+  return data != nullptr && output &&
+         output.write(reinterpret_cast<const char*>(data),
+                      static_cast<std::streamsize>(size));
 }
 
 }  // namespace
@@ -131,7 +164,9 @@ int main(int argc, char* argv[]) {
                  "Layer number font size in millimetres (default: 2.5)")
       ->check(CLI::Range(0.01, 100.0));
   app.add_option("--stacked-stl", stacked_stl_path,
-                 "Optional watertight stacked-layer preview STL path");
+                 "Optional stacked-layer preview STL path (binary). The "
+                 "preview uses physical layer thickness in millimetres to "
+                 "approximate the assembled design");
   app.add_option("--cutting-axis", cutting_axis_name,
                  "Cutting axis: +X, -X, +Y, -Y, +Z, or -Z (default: +Z)")
       ->check(CLI::IsMember({"+X", "-X", "+Y", "-Y", "+Z", "-Z"}));
@@ -185,32 +220,63 @@ int main(int argc, char* argv[]) {
     return 2;
   }
 
-  layer_cut::LoadError load_error;
-  const auto triangles = layer_cut::load_stl(stl_path, {}, &load_error);
-  if (load_error.code != layer_cut::LoadError::Code::OK) {
-    std::cerr << "Error: " << load_error.message << "\n";
+  EngineHandles handles;
+  handles.mesh = slicer_load_stl(stl_path.c_str());
+  if (!handles.mesh) {
+    std::cerr << "Error: " << slicer_last_error() << "\n";
     return 1;
   }
-  const auto validation = layer_cut::validate_and_normalize(triangles);
-  if (validation.has_errors()) {
-    for (const auto& diagnostic : validation.diagnostics) {
-      std::cerr << "Error: " << diagnostic.message << "\n";
-    }
-    return 2;
-  }
-  if (!validation.diagnostics.empty()) {
-    std::cerr << "Warning: " << validation.diagnostics.size()
+  const int diagnostic_count = slicer_mesh_diagnostic_count(handles.mesh);
+  if (diagnostic_count > 0) {
+    std::cerr << "Warning: " << diagnostic_count
               << " mesh diagnostic(s); continuing best-effort.\n";
   }
 
   const std::array<std::string, 6> axis_names = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
   const int cutting_axis = static_cast<int>(std::distance(
       axis_names.begin(), std::find(axis_names.begin(), axis_names.end(), cutting_axis_name)));
-  const auto transformed = layer_cut::transform_mesh(validation.mesh,
-      {cutting_axis, rotate_x, rotate_y, rotate_z, transform_scale});
-  const auto sliced = layer_cut::slice_mesh(transformed, {layer_height});
-  if (!sliced.valid()) {
-    for (const std::string& error : sliced.errors) std::cerr << "Error: " << error << "\n";
+  const int format_code = format == "png"             ? SLICER_FORMAT_PNG
+                          : format == "cricut-normal" ? SLICER_FORMAT_CRICUT_NORMAL
+                          : format == "cricut-large"  ? SLICER_FORMAT_CRICUT_LARGE
+                                                      : SLICER_FORMAT_SVG;
+  const int cleanup_code = cleanup_mode == "preserve" ? 0
+                           : cleanup_mode == "apply"  ? 2
+                                                      : 1;
+
+  handles.config = slicer_config_create();
+  bool config_ok =
+      handles.config != nullptr &&
+      slicer_config_set_layer_height(handles.config, layer_height) &&
+      slicer_config_set_format(handles.config, format_code) &&
+      slicer_config_set_dpi(handles.config, dpi) &&
+      slicer_config_set_cricut_gap(handles.config, cricut_gap) &&
+      slicer_config_set_cricut_packing(handles.config,
+                                       cricut_packing == "tight" ? 1 : 0) &&
+      slicer_config_set_cricut_guide_inset(handles.config, cricut_guide_inset) &&
+      slicer_config_set_show_layer_numbers(handles.config,
+                                           layer_numbers ? 1 : 0) &&
+      slicer_config_set_layer_number_font_size(handles.config,
+                                               layer_number_font_size) &&
+      slicer_config_set_cleanup_mode(handles.config, cleanup_code) &&
+      slicer_config_set_cleanup_thresholds(
+          handles.config, minimum_feature_width, minimum_area,
+          minimum_hole_width, minimum_bridge_width) &&
+      slicer_config_set_transform_euler(handles.config, cutting_axis, rotate_x,
+                                        rotate_y, rotate_z, transform_scale) &&
+      slicer_config_set_progress_callback(handles.config, engine_progress,
+                                          nullptr);
+  if (config_ok && canvas_width > 0.0) {
+    config_ok = slicer_config_set_canvas(handles.config, canvas_width,
+                                         canvas_height) != 0;
+  }
+  if (!config_ok) {
+    std::cerr << "Error: " << slicer_last_error() << "\n";
+    return 2;
+  }
+
+  handles.result = slicer_slice(handles.mesh, handles.config);
+  if (!handles.result) {
+    std::cerr << "Error: " << slicer_last_error() << "\n";
     return 2;
   }
 
@@ -221,192 +287,101 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::size_t exported = 0;
-  std::vector<layer_cut::SliceLayer> prepared_layers;
-  prepared_layers.reserve(sliced.layers.size());
-  print_progress(0, sliced.layers.size());
-
-  if (format == "cricut-normal" || format == "cricut-large") {
-    std::vector<layer_cut::SliceLayer> prepared_layers;
-    prepared_layers.reserve(sliced.layers.size());
-    for (const auto& layer : sliced.layers) {
-      const auto cleaned = layer_cut::union_polygons(layer.contours);
-      if (!cleaned.ok()) {
-        std::cerr << "Error: Polygon cleanup failed for layer " << layer.index
-                  << ": " << cleaned.error << "\n";
-        return 1;
-      }
-      layer_cut::ManufacturingCleanupOptions cleanup;
-      cleanup.mode = cleanup_mode == "preserve"
-                         ? layer_cut::CleanupMode::PRESERVE
-                         : cleanup_mode == "apply" ? layer_cut::CleanupMode::APPLY
-                                                     : layer_cut::CleanupMode::WARN;
-      cleanup.minimum_feature_width = minimum_feature_width;
-      cleanup.minimum_hole_width = minimum_hole_width;
-      cleanup.minimum_bridge_width = minimum_bridge_width;
-      cleanup.minimum_island_area = minimum_area;
-      const auto cleaned_for_cut =
-          layer_cut::apply_manufacturing_cleanup(cleaned.contours, cleanup);
-      if (!cleaned_for_cut.ok) {
-        std::cerr << "Error: Manufacturing cleanup failed for layer " << layer.index
-                  << ": " << cleaned_for_cut.error << "\n";
-        return 1;
-      }
-      auto prepared_layer = layer;
-      prepared_layer.contours = cleaned_for_cut.contours;
-      prepared_layers.push_back(std::move(prepared_layer));
-    }
-    layer_cut::CricutPageOptions page_options;
-    page_options.size = format == "cricut-large"
-                            ? layer_cut::CricutPageSize::LARGE
-                            : layer_cut::CricutPageSize::NORMAL;
-    page_options.gap_mm = cricut_gap;
-    page_options.packing = cricut_packing == "tight"
-                               ? layer_cut::CricutPackingStrategy::TIGHT
-                               : layer_cut::CricutPackingStrategy::FIXED;
-    page_options.show_layer_numbers = layer_numbers;
-    page_options.layer_number_font_size_mm = layer_number_font_size;
-    const auto pages = layer_cut::build_cricut_pages(prepared_layers, page_options);
-    if (!pages.ok()) {
-      std::cerr << "Error: Cricut page generation failed: " << pages.error << "\n";
-      return 1;
-    }
-    for (const auto& page : pages.pages) {
-      const std::string prefix = "page_" +
-          (page.page_index < 1000 ? std::string(3 - std::to_string(page.page_index).size(), '0') : "") +
-          std::to_string(page.page_index) + "_layers_" +
-          (page.tiles.front().layer_index < 1000 ? std::string(3 - std::to_string(page.tiles.front().layer_index).size(), '0') : "") +
-          std::to_string(page.tiles.front().layer_index) + "-" +
-          (page.tiles.back().layer_index < 1000 ? std::string(3 - std::to_string(page.tiles.back().layer_index).size(), '0') : "") +
-          std::to_string(page.tiles.back().layer_index);
-      std::vector<std::string> guide_warnings;
-      if (cricut_combined) {
-        const auto output_path = std::filesystem::path(output_dir) / (prefix + ".svg");
-        std::ofstream output(output_path);
-        const std::string combined = layer_cut::make_cricut_combined_svg(
-            page, cricut_guide_inset, &guide_warnings);
-        if (!output || !(output << combined)) {
-          std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
-          return 1;
-        }
-      } else {
-        const auto cut_path = std::filesystem::path(output_dir) / (prefix + ".cut.svg");
-        const auto guide_path = std::filesystem::path(output_dir) / (prefix + ".guide.svg");
-        const std::string guide_svg = layer_cut::make_cricut_guide_svg(
-            page, cricut_guide_inset, &guide_warnings);
-        std::ofstream cut(cut_path);
-        std::ofstream guide(guide_path);
-        if (!cut || !guide || !(cut << layer_cut::make_cricut_cut_svg(page)) ||
-            !(guide << guide_svg)) {
-          std::cerr << "Error: Cannot write Cricut page " << page.page_index << "\n";
-          return 1;
-        }
-      }
-      for (const std::string& warning : guide_warnings) {
-        std::cerr << "Warning: page " << page.page_index << ": " << warning << "\n";
-      }
-      exported += page.tiles.size();
-    }
-    std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path
-              << "\nGenerated " << pages.pages.size() << " Cricut page(s) in "
-              << output_dir << "\n";
-    return 0;
+  const int warning_count = slicer_result_warning_count(handles.result);
+  for (int i = 0; i < warning_count; ++i) {
+    const char* warning = slicer_result_warning(handles.result, i);
+    if (warning != nullptr) std::cerr << "Warning: " << warning << "\n";
   }
 
-  for (const auto& layer : sliced.layers) {
-    const auto cleaned = layer_cut::union_polygons(layer.contours);
-    if (!cleaned.ok()) {
-      std::cerr << "Error: Polygon cleanup failed for layer " << layer.index
-                << ": " << cleaned.error << "\n";
-      return 1;
-    }
-    layer_cut::ManufacturingCleanupOptions cleanup;
-    cleanup.mode = cleanup_mode == "preserve"
-                       ? layer_cut::CleanupMode::PRESERVE
-                       : cleanup_mode == "apply" ? layer_cut::CleanupMode::APPLY
-                                                   : layer_cut::CleanupMode::WARN;
-    cleanup.minimum_feature_width = minimum_feature_width;
-    cleanup.minimum_hole_width = minimum_hole_width;
-    cleanup.minimum_bridge_width = minimum_bridge_width;
-    cleanup.minimum_island_area = minimum_area;
-    const auto cleaned_for_cut =
-        layer_cut::apply_manufacturing_cleanup(cleaned.contours, cleanup);
-    if (!cleaned_for_cut.ok) {
-      std::cerr << "Error: Manufacturing cleanup failed for layer " << layer.index
-                << ": " << cleaned_for_cut.error << "\n";
-      return 1;
-    }
-    if (!cleaned_for_cut.warnings.empty()) {
-      std::cerr << "Warning: layer " << layer.index << ": "
-                << cleaned_for_cut.warnings.size()
-                << " feature(s) below manufacturing limits";
-      if (cleanup.mode == layer_cut::CleanupMode::APPLY && cleaned_for_cut.changed)
-        std::cerr << "; geometry modified";
-      std::cerr << "\n";
-    }
-    const auto& filtered = cleaned_for_cut.contours;
-    auto prepared_layer = layer;
-    prepared_layer.contours = filtered;
-    prepared_layers.push_back(std::move(prepared_layer));
-    layer_cut::SvgOptions svg_options;
-    svg_options.layer_index = layer.index;
-    svg_options.layer_z = layer.z;
-    svg_options.min = {canvas_width > 0.0 ? 0.0 : layer.min.x,
-                       canvas_height > 0.0 ? 0.0 : layer.min.y};
-    svg_options.max = {canvas_width > 0.0 ? canvas_width : layer.max.x,
-                       canvas_height > 0.0 ? canvas_height : layer.max.y};
-    const std::filesystem::path filename =
-        std::filesystem::path(output_dir) /
-         ("layer_" + (layer.index < 1000 ? std::string(3 - std::to_string(layer.index).size(), '0') : "") +
-          std::to_string(layer.index) + "." + format);
-    if (format == "svg") {
-      std::string write_error;
-      if (!layer_cut::write_svg_file(filename.string(), filtered, svg_options, &write_error)) {
-        std::cerr << "Error: " << write_error << "\n";
+  const bool cricut_format =
+      format == "cricut-normal" || format == "cricut-large";
+  int exported = 0;
+  if (cricut_format) {
+    const int page_count = slicer_result_page_count(handles.result);
+    for (int page = 0; page < page_count; ++page) {
+      const int layer_start = slicer_result_page_layer_start(handles.result, page);
+      const int layer_end =
+          layer_start + slicer_result_page_layer_count(handles.result, page) - 1;
+      const std::string prefix = "page_" + zero_padded(page + 1) + "_layers_" +
+                                 zero_padded(layer_start) + "-" +
+                                 zero_padded(layer_end);
+      bool written = false;
+      if (cricut_combined) {
+        written = write_text_file(
+            std::filesystem::path(output_dir) / (prefix + ".svg"),
+            slicer_result_page_combined_svg(handles.result, page));
+      } else {
+        written = write_text_file(
+                      std::filesystem::path(output_dir) / (prefix + ".cut.svg"),
+                      slicer_result_page_cut_svg(handles.result, page)) &&
+                  write_text_file(
+                      std::filesystem::path(output_dir) / (prefix + ".guide.svg"),
+                      slicer_result_page_guide_svg(handles.result, page));
+      }
+      if (!written) {
+        std::cerr << "Error: Cannot write Cricut page " << (page + 1) << "\n";
         return 1;
       }
-    } else {
-      layer_cut::PngOptions png_options;
-      png_options.min = svg_options.min;
-      png_options.max = svg_options.max;
-      png_options.dpi = dpi;
-      const auto png = layer_cut::make_png(filtered, png_options);
-      if (!png.ok()) {
-        std::cerr << "Error: " << png.error << "\n";
-        return 1;
-      }
-      std::ofstream output(filename, std::ios::binary);
-      if (!output || !output.write(reinterpret_cast<const char*>(png.bytes.data()),
-                                   static_cast<std::streamsize>(png.bytes.size()))) {
-        std::cerr << "Error: Cannot write PNG output: " << filename << "\n";
-        return 1;
-      }
+      exported += slicer_result_page_layer_count(handles.result, page);
     }
-    ++exported;
-    print_progress(exported, sliced.layers.size());
+  } else {
+    const int layer_count = slicer_result_layer_count(handles.result);
+    for (int index = 0; index < layer_count; ++index) {
+      const std::filesystem::path filename =
+          std::filesystem::path(output_dir) /
+          ("layer_" + zero_padded(index) + "." + format);
+      bool written = false;
+      if (format == "svg") {
+        written =
+            write_text_file(filename, slicer_result_layer_svg(handles.result, index));
+      } else {
+        std::size_t size = 0;
+        const uint8_t* png =
+            slicer_result_layer_png(handles.result, index, &size);
+        written = write_binary_file(filename, png, size);
+      }
+      if (!written) {
+        std::cerr << "Error: Cannot write layer output: " << filename << "\n";
+        return 1;
+      }
+      ++exported;
+    }
   }
 
   if (!stacked_stl_path.empty()) {
-    const auto preview =
-        layer_cut::make_stacked_preview(prepared_layers, layer_height);
-    if (!preview.ok()) {
-      std::cerr << "Error: Stacked STL generation failed: " << preview.error
+    std::size_t size = 0;
+    const uint8_t* data = slicer_result_stacked_stl(handles.result, &size);
+    if (data == nullptr || size < 84) {
+      std::cerr << "Error: Stacked STL generation failed";
+      for (int i = 0; i < slicer_result_diagnostic_count(handles.result); ++i) {
+        const char* diagnostic = slicer_result_diagnostic(handles.result, i);
+        if (diagnostic != nullptr &&
+            std::string(diagnostic).find("Stacked preview") != std::string::npos) {
+          std::cerr << ": " << diagnostic;
+        }
+      }
+      std::cerr << "\n";
+      return 1;
+    }
+    if (!write_binary_file(stacked_stl_path, data, size)) {
+      std::cerr << "Error: Cannot write stacked STL output: " << stacked_stl_path
                 << "\n";
       return 1;
     }
-    std::string write_error;
-    if (!layer_cut::write_ascii_stl_file(stacked_stl_path, preview.triangles,
-                                         "layer_cut_stacked_preview",
-                                         &write_error)) {
-      std::cerr << "Error: " << write_error << "\n";
-      return 1;
-    }
-    std::cout << "Generated stacked STL with " << preview.triangles.size()
+    uint32_t triangle_count = 0;
+    std::memcpy(&triangle_count, data + 80, sizeof(triangle_count));
+    std::cout << "Generated stacked STL with " << triangle_count
               << " triangle(s) at " << stacked_stl_path << "\n";
   }
 
-  std::cout << "Loaded " << triangles.size() << " triangles from " << stl_path
-            << "\nGenerated " << exported << " " << format << " layer(s) in " << output_dir
-            << "\n";
+  std::cout << "Loaded " << slicer_mesh_triangle_count(handles.mesh)
+            << " triangles from " << stl_path << "\n";
+  if (cricut_format) {
+    std::cout << "Generated " << slicer_result_page_count(handles.result)
+              << " Cricut page(s) in " << output_dir << "\n";
+  } else {
+    std::cout << "Generated " << exported << " " << format << " layer(s) in "
+              << output_dir << "\n";
+  }
   return 0;
 }

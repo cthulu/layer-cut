@@ -165,7 +165,17 @@ slicer_mesh_t slicer_load_stl(const char* path) {
   const auto triangles = layer_cut::load_stl(path, {}, &error);
   if (error.code != layer_cut::LoadError::Code::OK) { fail(error.message); return nullptr; }
   const auto validation = layer_cut::validate_and_normalize(triangles);
-  if (validation.has_errors()) { fail("STL mesh validation failed"); return nullptr; }
+  if (validation.has_errors()) {
+    std::string message = "STL mesh validation failed";
+    for (const auto& diagnostic : validation.diagnostics) {
+      if (diagnostic.severity == layer_cut::DiagnosticSeverity::ERROR) {
+        message += ": " + diagnostic.message;
+        break;
+      }
+    }
+    fail(message);
+    return nullptr;
+  }
   auto* result = new MeshHandle;
   result->mesh = validation.mesh;
   result->diagnostics = validation.diagnostics;
