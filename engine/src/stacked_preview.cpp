@@ -269,6 +269,19 @@ bool triangulate_contours(const std::vector<Contour>& contours,
 
 void add_triangle(std::vector<Triangle>& triangles, const Vec3& a,
                   const Vec3& b, const Vec3& c) {
+  // Contour points closer than the float epsilon at their coordinate
+  // magnitude collapse to identical vertices, producing zero-area slivers
+  // that the strict STL writers reject. Drop them; they carry no area.
+  const double ux = static_cast<double>(b.x) - a.x;
+  const double uy = static_cast<double>(b.y) - a.y;
+  const double uz = static_cast<double>(b.z) - a.z;
+  const double vx = static_cast<double>(c.x) - a.x;
+  const double vy = static_cast<double>(c.y) - a.y;
+  const double vz = static_cast<double>(c.z) - a.z;
+  const double cx = uy * vz - uz * vy;
+  const double cy = uz * vx - ux * vz;
+  const double cz = ux * vy - uy * vx;
+  if (cx * cx + cy * cy + cz * cz <= 0.0) return;
   triangles.push_back({{0.0f, 0.0f, 0.0f}, a, b, c});
 }
 
